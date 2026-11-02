@@ -1,0 +1,185 @@
+import React from 'react';
+import { 
+  BookOpen, 
+  UserCheck, 
+  ClipboardCheck, 
+  BarChart3, 
+  Printer, 
+  Settings,
+  AlertCircle,
+  ShieldCheck,
+  User
+} from 'lucide-react';
+import { UserRole } from '../types';
+
+export type NavTab = 'jurnal' | 'verifikasi' | 'monitoring' | 'rekapitulasi' | 'cetak' | 'pengaturan' | 'profil';
+
+interface NavbarProps {
+  activeTab: NavTab;
+  onTabChange: (tab: NavTab) => void;
+  pendingVerifikasiCount: number;
+  userRole: UserRole;
+}
+
+interface NavItem {
+  id: NavTab;
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge: string | number | null;
+  highlight?: boolean;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  activeTab,
+  onTabChange,
+  pendingVerifikasiCount,
+  userRole,
+}) => {
+  const navItems: NavItem[] = userRole === 'superadmin'
+    ? [
+        {
+          id: 'monitoring' as NavTab,
+          label: 'Pengecekan Jurnal Semua Pegawai',
+          shortLabel: 'Monitoring Jurnal',
+          icon: UserCheck,
+          badge: null,
+        },
+        {
+          id: 'jurnal' as NavTab,
+          label: 'Semua Jurnal Harian',
+          shortLabel: 'Jurnal',
+          icon: BookOpen,
+          badge: null,
+        },
+        {
+          id: 'rekapitulasi' as NavTab,
+          label: 'Rekapitulasi Bulanan Pegawai',
+          shortLabel: 'Rekap',
+          icon: BarChart3,
+          badge: null,
+        },
+        {
+          id: 'cetak' as NavTab,
+          label: 'Cetak & Ekspor',
+          shortLabel: 'Cetak',
+          icon: Printer,
+          badge: null,
+        },
+        {
+          id: 'pengaturan' as NavTab,
+          label: 'Pengaturan Admin',
+          shortLabel: 'Pengaturan',
+          icon: Settings,
+          badge: null,
+        },
+        {
+          id: 'profil' as NavTab,
+          label: 'Profil Super Admin',
+          shortLabel: 'Profil',
+          icon: ShieldCheck,
+          badge: 'Super Admin',
+        },
+      ]
+    : userRole === 'atasan'
+      ? [
+          {
+            id: 'verifikasi' as NavTab,
+            label: 'Verifikasi Jurnal',
+            shortLabel: 'Verifikasi',
+            icon: ClipboardCheck,
+            badge: pendingVerifikasiCount > 0 ? pendingVerifikasiCount : null,
+            highlight: pendingVerifikasiCount > 0,
+          },
+          {
+            id: 'monitoring' as NavTab,
+            label: 'Pengecekan Jurnal Harian Pegawai',
+            shortLabel: 'Cek Jurnal Pegawai',
+            icon: UserCheck,
+            badge: null,
+            highlight: false,
+          },
+        ]
+      : [
+          {
+            id: 'jurnal' as NavTab,
+            label: 'Jurnal Harian',
+            shortLabel: 'Jurnal',
+            icon: BookOpen,
+            badge: null,
+          },
+          {
+            id: 'rekapitulasi' as NavTab,
+            label: 'Rekapitulasi Bulanan',
+            shortLabel: 'Rekap',
+            icon: BarChart3,
+            badge: null,
+          },
+          {
+            id: 'cetak' as NavTab,
+            label: 'Cetak & Ekspor',
+            shortLabel: 'Cetak',
+            icon: Printer,
+            badge: null,
+          },
+          {
+            id: 'pengaturan' as NavTab,
+            label: userRole === 'admin' ? 'Pengaturan Admin' : 'Pengaturan Instansi',
+            shortLabel: 'Pengaturan',
+            icon: Settings,
+            badge: userRole === 'admin' ? 'Admin' : null,
+          },
+        ];
+
+  return (
+    <nav className="bg-white border-b border-slate-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Desktop / Tablet Scrollable Tabs */}
+        <div className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 sm:py-2.5 no-scrollbar">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onTabChange(item.id)}
+                className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition whitespace-nowrap shrink-0 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <span>{item.label}</span>
+                {item.badge !== null && (
+                  <span
+                    className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full font-bold leading-none ${
+                      isActive
+                        ? 'bg-white text-blue-700'
+                        : item.highlight
+                          ? 'bg-amber-500 text-white animate-pulse'
+                          : item.badge === 'Super Admin'
+                            ? 'bg-rose-100 text-rose-700 font-extrabold'
+                            : 'bg-purple-100 text-purple-700'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {userRole === 'superadmin' && (
+            <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 ml-auto bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">
+              <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+              <span>Akses Super Admin: Hak Akses Seluruh Jurnal & Pengaturan</span>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </nav>
+  );
+};

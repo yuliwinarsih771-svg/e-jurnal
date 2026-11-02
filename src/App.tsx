@@ -1,0 +1,656 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Header } from './components/Header';
+import { Navbar, NavTab } from './components/Navbar';
+import { JurnalHarianView } from './components/JurnalHarianView';
+import { JurnalFormModal } from './components/JurnalFormModal';
+import { VerifikasiAtasanView } from './components/VerifikasiAtasanView';
+import { MonitoringPegawaiHarianView } from './components/MonitoringPegawaiHarianView';
+import { RekapitulasiView } from './components/RekapitulasiView';
+import { PengaturanAdminView } from './components/PengaturanAdminView';
+import { PrintDocumentModal } from './components/PrintDocumentModal';
+import { LaravelApiGuideModal } from './components/LaravelApiGuideModal';
+import { HelpGuideModal } from './components/HelpGuideModal';
+import { LoginView } from './components/LoginView';
+import { ProfilSuperAdminView } from './components/ProfilSuperAdminView';
+
+import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord } from './types';
+import { INITIAL_PENGATURAN } from './data/initialData';
+import confetti from 'canvas-confetti';
+import {
+  loadPengaturan,
+  savePengaturan,
+  loadPengaturanMap,
+  saveAllPengaturanMap,
+  getPengaturanForUser,
+  loadPegawai,
+  savePegawai,
+  loadKegiatan,
+  saveKegiatan,
+  loadPresensi,
+  savePresensi,
+  loadCurrentUserId,
+  saveCurrentUserId,
+  loadAuthUser,
+  saveAuthUser,
+  resetAllData,
+} from './utils/storage';
+
+export default function App() {
+  // Application State - Independent per-account settings map
+  const [pengaturanMap, setPengaturanMap] = useState<Record<string, PengaturanInstansi>>(loadPengaturanMap);
+  const [pegawaiList, setPegawaiList] = useState<Pegawai[]>(loadPegawai);
+  const [authUser, setAuthUser] = useState<Pegawai | null>(loadAuthUser);
+  const [currentUserId, setCurrentUserId] = useState<string>(() => {
+    const existingAuth = loadAuthUser();
+    return existingAuth ? existingAuth.id : loadCurrentUserId();
+  });
+  const [kegiatanList, setKegiatanList] = useState<KegiatanJurnal[]>(loadKegiatan);
+  const [presensiList, setPresensiList] = useState<PresensiRecord[]>(loadPresensi);
+
+  // Navigation & Filtering
+  const [activeTab, setActiveTab] = useState<NavTab>('jurnal');
+  const [selectedBulan, setSelectedBulan] = useState<number>(1); // Default Januari
+  const [selectedTahun, setSelectedTahun] = useState<number>(2026);
+  const [selectedPegawaiId, setSelectedPegawaiId] = useState<string>(currentUserId);
+
+  // Modals
+  const [isJurnalModalOpen, setIsJurnalModalOpen] = useState<boolean>(false);
+  const [editingKegiatan, setEditingKegiatan] = useState<KegiatanJurnal | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [isLaravelDocsOpen, setIsLaravelDocsOpen] = useState<boolean>(false);
+  const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
+
+  // Sync settings map with storage
+  useEffect(() => {
+    saveAllPengaturanMap(pengaturanMap);
+  }, [pengaturanMap]);
+
+  useEffect(() => {
+    savePegawai(pegawaiList);
+  }, [pegawaiList]);
+
+  useEffect(() => {
+    saveKegiatan(kegiatanList);
+  }, [kegiatanList]);
+
+  useEffect(() => {
+    savePresensi(presensiList);
+  }, [presensiList]);
+
+  useEffect(() => {
+    saveCurrentUserId(currentUserId);
+  }, [currentUserId]);
+
+  // Current active user
+  const currentPegawai = useMemo(() => {
+    return pegawaiList.find((p) => p.id === currentUserId) || pegawaiList[0];
+  }, [pegawaiList, currentUserId]);
+
+  // Pending count for superior verification badge
+  const pendingVerifikasiCount = useMemo(() => {
+    return kegiatanList.filter((k) => k.statusValidasi === 'Menunggu').length;
+  }, [kegiatanList]);
+
+  // Target pegawai being viewed
+  const targetPegawai = useMemo(() => {
+    return pegawaiList.find((p) => p.id === selectedPegawaiId) || currentPegawai;
+  }, [pegawaiList, selectedPegawaiId, currentPegawai]);
+
+  // Settings resolution helper per user
+  const getPengaturanFor = (pegId: string): PengaturanInstansi => {
+    return getPengaturanForUser(pegId, pengaturanMap);
+  };
+
+  // Specific settings for current active logged-in user
+  const currentPengaturan = useMemo(() => {
+    return getPengaturanFor(currentPegawai.id);
+  }, [currentPegawai.id, pengaturanMap]);
+
+  // Specific settings for target employee being viewed/printed
+  const targetPengaturan = useMemo(() => {
+    return getPengaturanFor(targetPegawai.id);
+  }, [targetPegawai.id, pengaturanMap]);
+
+  // Next Nomor Kegiatan
+  const nextNomorKegiatan = useMemo(() => {
+    const userKegs = kegiatanList.filter((k) => k.pegawaiId === targetPegawai.id);
+    const count = userKegs.length + 1;
+    return count.toString().padStart(2, '0');
+  }, [kegiatanList, targetPegawai.id]);
+
+  // Handlers for independent per-account settings
+  const handleSaveAccountPengaturan = (targetId: string, newSettings: PengaturanInstansi) => {
+    setPengaturanMap((prev) => {
+      const updated = {
+        ...prev,
+        [targetId]: newSettings,
+      };
+      saveAllPengaturanMap(updated);
+      return updated;
+    });
+  };
+
+  const handleApplyPengaturanToAll = (newSettings: PengaturanInstansi) => {
+    setPengaturanMap((prev) => {
+      const updated: Record<string, PengaturanInstansi> = {
+        ...prev,
+        default: newSettings,
+      };
+      pegawaiList.forEach((p) => {
+        updated[p.id] = { ...newSettings };
+      });
+      saveAllPengaturanMap(updated);
+      return updated;
+    });
+  };
+
+  // Guard:
+  // - Super Admin: Mempunyai hak akses ke semua jurnal (monitoring, jurnal, rekapitulasi, cetak, pengaturan)
+  // - Atasan: Terbatas khusus 'verifikasi' dan 'monitoring'
+  // - Non-Atasan & Non-SuperAdmin: Tidak dapat membuka 'verifikasi' dan 'monitoring'
+  useEffect(() => {
+    if (currentPegawai.role === 'atasan') {
+      if (activeTab !== 'verifikasi' && activeTab !== 'monitoring') {
+        setActiveTab('verifikasi');
+      }
+    } else if (currentPegawai.role === 'superadmin') {
+      if (activeTab === 'verifikasi') {
+        setActiveTab('monitoring');
+      }
+    } else {
+      if (activeTab === 'verifikasi' || activeTab === 'monitoring') {
+        setActiveTab('jurnal');
+      }
+    }
+  }, [currentPegawai.role, activeTab]);
+
+  // Role / User Switcher handler
+  const handleSelectPegawai = (peg: Pegawai) => {
+    setCurrentUserId(peg.id);
+    setSelectedPegawaiId(peg.id);
+    setAuthUser(peg);
+    saveAuthUser(peg);
+    if (peg.role === 'superadmin') {
+      setActiveTab('monitoring');
+    } else if (peg.role === 'atasan') {
+      setActiveTab('verifikasi');
+    } else if (activeTab === 'verifikasi' || activeTab === 'monitoring') {
+      setActiveTab('jurnal');
+    }
+  };
+
+  // Auth Handlers
+  const handleLogin = (user: Pegawai) => {
+    setAuthUser(user);
+    saveAuthUser(user);
+    setCurrentUserId(user.id);
+    setSelectedPegawaiId(user.id);
+    if (user.role === 'superadmin') {
+      setActiveTab('monitoring');
+    } else if (user.role === 'atasan') {
+      setActiveTab('verifikasi');
+    } else {
+      setActiveTab('jurnal');
+    }
+    confetti({ particleCount: 60, spread: 70, origin: { y: 0.5 } });
+  };
+
+  const handleLogout = () => {
+    setAuthUser(null);
+    saveAuthUser(null);
+  };
+
+  const handleUpdateProfile = (updatedData: Partial<Pegawai>) => {
+    setPegawaiList((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === currentPegawai.id) {
+          return { ...p, ...updatedData };
+        }
+        return p;
+      });
+      savePegawai(updated);
+      return updated;
+    });
+
+    setAuthUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updatedData };
+      saveAuthUser(updated);
+      return updated;
+    });
+  };
+
+  const handleUpdatePegawaiProfile = (pegId: string, updatedData: Partial<Pegawai>) => {
+    setPegawaiList((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === pegId) {
+          return { ...p, ...updatedData };
+        }
+        return p;
+      });
+      savePegawai(updated);
+      return updated;
+    });
+
+    if (authUser && authUser.id === pegId) {
+      const updatedAuth = { ...authUser, ...updatedData };
+      setAuthUser(updatedAuth);
+      saveAuthUser(updatedAuth);
+    }
+  };
+
+  const handleUpdateInstansiPengaturan = (pegId: string, updatedSettings: Partial<PengaturanInstansi>) => {
+    setPengaturanMap((prev) => {
+      const current = prev[pegId] || prev['default'] || INITIAL_PENGATURAN;
+      const merged = { ...current, ...updatedSettings };
+      const updatedMap = {
+        ...prev,
+        [pegId]: merged,
+        ['default']: { ...(prev['default'] || INITIAL_PENGATURAN), ...updatedSettings },
+      };
+      saveAllPengaturanMap(updatedMap);
+      return updatedMap;
+    });
+  };
+
+  // CRUD Kegiatan Jurnal
+  const handleSaveKegiatan = (
+    data: Omit<KegiatanJurnal, 'id' | 'statusValidasi'>,
+    editId?: string
+  ) => {
+    // Automatically switch view to the month and year of the saved item so user immediately sees it!
+    if (data.tanggal) {
+      const [y, m] = data.tanggal.split('-');
+      if (y && m) {
+        setSelectedTahun(parseInt(y, 10));
+        setSelectedBulan(parseInt(m, 10));
+      }
+    }
+
+    if (editId) {
+      setKegiatanList((prev) =>
+        prev.map((item) =>
+          item.id === editId
+            ? {
+                ...item,
+                ...data,
+              }
+            : item
+        )
+      );
+    } else {
+      const newKegiatan: KegiatanJurnal = {
+        id: `keg-${Date.now()}`,
+        ...data,
+        statusValidasi: 'Menunggu',
+      };
+      setKegiatanList((prev) => [newKegiatan, ...prev]);
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+    }
+  };
+
+  const handleEditKegiatan = (keg: KegiatanJurnal) => {
+    setEditingKegiatan(keg);
+    setIsJurnalModalOpen(true);
+  };
+
+  const handleDeleteKegiatan = (id: string) => {
+    setKegiatanList((prev) => prev.filter((k) => k.id !== id));
+  };
+
+  const handleBatchDeleteKegiatan = (ids: string[]) => {
+    setKegiatanList((prev) => prev.filter((k) => !ids.includes(k.id)));
+  };
+
+  // Presensi Handler
+  const handleSavePresensi = (newRecord: PresensiRecord) => {
+    setPresensiList((prev) => {
+      const existingIdx = prev.findIndex((p) => p.id === newRecord.id);
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        copy[existingIdx] = newRecord;
+        return copy;
+      }
+      return [...prev, newRecord];
+    });
+  };
+
+  // Verifikasi Atasan
+  const handleApproveKegiatan = (id: string, catatan?: string) => {
+    const now = new Date();
+    const dateStr = `${now.toISOString().split('T')[0]} ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+    const targetItem = kegiatanList.find((k) => k.id === id);
+    const staffPengaturan = targetItem ? getPengaturanFor(targetItem.pegawaiId) : targetPengaturan;
+    const validatorNama = currentPegawai.role === 'atasan' ? currentPegawai.nama : (staffPengaturan.namaAtasan || currentPegawai.nama);
+    const validatorNip = currentPegawai.role === 'atasan' ? currentPegawai.nip : (staffPengaturan.nipAtasan || currentPegawai.nip);
+
+    setKegiatanList((prev) =>
+      prev.map((k) =>
+        k.id === id
+          ? {
+              ...k,
+              statusValidasi: 'Disetujui',
+              catatanAtasan: catatan || k.catatanAtasan,
+              tanggalValidasi: dateStr,
+              namaValidator: validatorNama,
+              nipValidator: validatorNip,
+            }
+          : k
+      )
+    );
+  };
+
+  const handleRejectKegiatan = (id: string, catatan: string) => {
+    setKegiatanList((prev) =>
+      prev.map((k) =>
+        k.id === id
+          ? {
+              ...k,
+              statusValidasi: 'Ditolak',
+              catatanAtasan: catatan,
+            }
+          : k
+      )
+    );
+  };
+
+  const handleBatchApprove = (ids: string[]) => {
+    const now = new Date();
+    const dateStr = `${now.toISOString().split('T')[0]} ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+    const firstItem = kegiatanList.find((k) => ids.includes(k.id));
+    const staffPengaturan = firstItem ? getPengaturanFor(firstItem.pegawaiId) : targetPengaturan;
+    const validatorNama = currentPegawai.role === 'atasan' ? currentPegawai.nama : (staffPengaturan.namaAtasan || currentPegawai.nama);
+    const validatorNip = currentPegawai.role === 'atasan' ? currentPegawai.nip : (staffPengaturan.nipAtasan || currentPegawai.nip);
+
+    setKegiatanList((prev) =>
+      prev.map((k) =>
+        ids.includes(k.id)
+          ? {
+              ...k,
+              statusValidasi: 'Disetujui',
+              tanggalValidasi: dateStr,
+              namaValidator: validatorNama,
+              nipValidator: validatorNip,
+            }
+          : k
+      )
+    );
+  };
+
+  // Reset to default
+  const handleResetData = () => {
+    resetAllData();
+    window.location.reload();
+  };
+
+  // Render Login Screen if no authenticated user session
+  if (!authUser) {
+    return (
+      <LoginView
+        allPegawai={pegawaiList}
+        pengaturan={pengaturanMap['default'] || INITIAL_PENGATURAN}
+        onLogin={handleLogin}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+      
+      {/* Header */}
+      <Header
+        currentPegawai={currentPegawai}
+        allPegawai={pegawaiList}
+        pengaturan={currentPengaturan}
+        onSelectPegawai={handleSelectPegawai}
+        onOpenGuide={() => setIsGuideOpen(true)}
+        onOpenLaravelDocs={() => setIsLaravelDocsOpen(true)}
+        onLogout={handleLogout}
+        onNavigateToProfile={() => setActiveTab('profil')}
+      />
+
+      {/* Navigation Tabs */}
+      <Navbar
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          if (currentPegawai.role === 'superadmin') {
+            if (tab === 'cetak') {
+              setIsPrintModalOpen(true);
+            } else {
+              setActiveTab(tab);
+            }
+            return;
+          }
+          if (currentPegawai.role === 'atasan') {
+            if (tab === 'verifikasi' || tab === 'monitoring') {
+              setActiveTab(tab);
+            }
+            return;
+          }
+          if (tab === 'verifikasi' || tab === 'monitoring') {
+            setActiveTab('jurnal');
+            return;
+          }
+          if (tab === 'cetak') {
+            setIsPrintModalOpen(true);
+          } else {
+            setActiveTab(tab);
+          }
+        }}
+        pendingVerifikasiCount={pendingVerifikasiCount}
+        userRole={currentPegawai.role}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {activeTab === 'jurnal' && (
+          <JurnalHarianView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            pengaturan={targetPengaturan}
+            kegiatanList={kegiatanList}
+            onAddKegiatan={() => {
+              setEditingKegiatan(null);
+              setIsJurnalModalOpen(true);
+            }}
+            onEditKegiatan={handleEditKegiatan}
+            onDeleteKegiatan={handleDeleteKegiatan}
+            onBatchDeleteKegiatan={handleBatchDeleteKegiatan}
+            onOpenPrintModal={() => setIsPrintModalOpen(true)}
+            selectedBulan={selectedBulan}
+            setSelectedBulan={setSelectedBulan}
+            selectedTahun={selectedTahun}
+            setSelectedTahun={setSelectedTahun}
+            selectedPegawaiId={selectedPegawaiId}
+            setSelectedPegawaiId={setSelectedPegawaiId}
+            onNavigateToRekap={() => setActiveTab('rekapitulasi')}
+            onUpdatePegawai={handleUpdatePegawaiProfile}
+            onUpdatePengaturan={handleUpdateInstansiPengaturan}
+          />
+        )}
+
+        {activeTab === 'verifikasi' && currentPegawai.role === 'atasan' && (
+          <VerifikasiAtasanView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            pengaturan={targetPengaturan}
+            kegiatanList={kegiatanList}
+            onApproveKegiatan={handleApproveKegiatan}
+            onRejectKegiatan={handleRejectKegiatan}
+            onBatchApprove={handleBatchApprove}
+            selectedBulan={selectedBulan}
+            selectedTahun={selectedTahun}
+            onSwitchToAtasan={() => {
+              const atasanUser = pegawaiList.find((p) => p.role === 'atasan');
+              if (atasanUser) {
+                handleSelectPegawai(atasanUser);
+              }
+            }}
+            onGoToJurnal={() => setActiveTab('monitoring')}
+            onGoToMonitoring={() => setActiveTab('monitoring')}
+          />
+        )}
+
+        {activeTab === 'monitoring' && (currentPegawai.role === 'atasan' || currentPegawai.role === 'superadmin') && (
+          <MonitoringPegawaiHarianView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            kegiatanList={kegiatanList}
+            presensiList={presensiList}
+            pengaturan={currentPengaturan}
+            onApproveKegiatan={handleApproveKegiatan}
+            onRejectKegiatan={handleRejectKegiatan}
+            onGoToVerifikasi={() => setActiveTab('verifikasi')}
+            onOpenPrintForPegawai={(peg) => {
+              setSelectedPegawaiId(peg.id);
+              setIsPrintModalOpen(true);
+            }}
+          />
+        )}
+
+        {activeTab === 'rekapitulasi' && (
+          <RekapitulasiView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            pengaturan={targetPengaturan}
+            kegiatanList={kegiatanList}
+            presensiList={presensiList}
+            selectedBulan={selectedBulan}
+            setSelectedBulan={setSelectedBulan}
+            selectedTahun={selectedTahun}
+            setSelectedTahun={setSelectedTahun}
+            selectedPegawaiId={selectedPegawaiId}
+            setSelectedPegawaiId={setSelectedPegawaiId}
+            onOpenPrintModal={() => setIsPrintModalOpen(true)}
+            onNavigateToJurnal={() => setActiveTab('jurnal')}
+          />
+        )}
+
+        {activeTab === 'pengaturan' && (
+          <PengaturanAdminView
+            pengaturanMap={pengaturanMap}
+            currentPegawai={currentPegawai}
+            onSaveAccountPengaturan={handleSaveAccountPengaturan}
+            onApplyToAllAccounts={handleApplyPengaturanToAll}
+            pengaturan={currentPengaturan}
+            onSavePengaturan={(newSettings) => handleSaveAccountPengaturan(currentPegawai.id, newSettings)}
+            pegawaiList={pegawaiList}
+            onSavePegawaiList={(newList) => {
+              setPegawaiList(newList);
+              setPengaturanMap((prev) => {
+                let changed = false;
+                const copy = { ...prev };
+                newList.forEach((p) => {
+                  if (!copy[p.id]) {
+                    copy[p.id] = {
+                      ...(copy['default'] || copy[currentPegawai.id] || INITIAL_PENGATURAN),
+                      bidangBagian: p.unitKerja || (copy['default'] || INITIAL_PENGATURAN).bidangBagian,
+                    };
+                    changed = true;
+                  }
+                });
+                if (changed) {
+                  saveAllPengaturanMap(copy);
+                  return copy;
+                }
+                return prev;
+              });
+              if (authUser) {
+                const updatedSelf = newList.find((p) => p.id === authUser.id);
+                if (updatedSelf) {
+                  setAuthUser(updatedSelf);
+                  saveAuthUser(updatedSelf);
+                } else {
+                  handleLogout();
+                }
+              }
+            }}
+            onResetData={handleResetData}
+            isSuperAdmin={currentPegawai.role === 'superadmin'}
+            initialSelectedAccountId={currentPegawai.id}
+            onGoToProfile={() => setActiveTab('profil')}
+          />
+        )}
+
+        {activeTab === 'profil' && (
+          <ProfilSuperAdminView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            pengaturan={currentPengaturan}
+            kegiatanList={kegiatanList}
+            onUpdateProfile={handleUpdateProfile}
+            onNavigateToTab={(tab) => {
+              if (tab === 'cetak') {
+                setIsPrintModalOpen(true);
+              } else {
+                setActiveTab(tab);
+              }
+            }}
+          />
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-slate-200 py-4 print:hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+          <div>
+            <strong>{currentPengaturan.namaInstansi}</strong> &bull; {currentPengaturan.badanDinas}
+          </div>
+          <div className="flex items-center space-x-3">
+            <span>Sistem E-Jurnal Harian Pegawai</span>
+            <button
+              onClick={() => setIsLaravelDocsOpen(true)}
+              className="text-blue-600 hover:underline font-semibold"
+            >
+              Arsitektur Laravel/MySQL
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      {/* Modals */}
+      <JurnalFormModal
+        isOpen={isJurnalModalOpen}
+        onClose={() => {
+          setIsJurnalModalOpen(false);
+          setEditingKegiatan(null);
+        }}
+        onSave={handleSaveKegiatan}
+        onDelete={handleDeleteKegiatan}
+        editingKegiatan={editingKegiatan}
+        currentPegawai={targetPegawai}
+        selectedBulan={selectedBulan}
+        selectedTahun={selectedTahun}
+        nextNomorKegiatan={nextNomorKegiatan}
+      />
+
+      <PrintDocumentModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        pegawai={targetPegawai}
+        pengaturan={targetPengaturan}
+        kegiatanList={kegiatanList}
+        bulan={selectedBulan}
+        tahun={selectedTahun}
+        allPegawai={pegawaiList}
+        onSelectPegawaiId={setSelectedPegawaiId}
+      />
+
+      <LaravelApiGuideModal
+        isOpen={isLaravelDocsOpen}
+        onClose={() => setIsLaravelDocsOpen(false)}
+      />
+
+      <HelpGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+      />
+
+    </div>
+  );
+}

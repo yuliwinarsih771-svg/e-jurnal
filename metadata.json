@@ -1,0 +1,6 @@
+{
+  "name": "E-Jurnal Harian & Presensi Pegawai",
+  "description": "Sistem Informasi Jurnal Harian Pegawai, Pelaporan Tugas, Verifikasi Atasan Langsung, Rekapitulasi Kinerja Bulanan, dan Ekspor Otomatis ke Excel, Word, dan PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
