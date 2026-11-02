@@ -663,10 +663,10 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-rose-300 transition space-y-2">
                 <div className="flex items-center space-x-2 text-rose-700 font-bold text-xs">
                   <Settings className="w-4 h-4 text-rose-600" />
-                  <span>Pengaturan Instansi & Pejabat Penilai Per Akun</span>
+                  <span>Pengaturan Instansi & Pejabat Penilai</span>
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Mengatur kop surat berbeda untuk setiap akun pegawai, pejabat penilai (atasan langsung) yang berbeda, jam kerja, serta master data pengguna ASN.
+                  Mengatur kop surat resmi, logo instansi, serta pejabat penilai kinerja untuk masing-masing akun pegawai maupun templat baku instansi.
                 </p>
                 {onNavigateToTab && (
                   <button
@@ -674,7 +674,7 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
                     onClick={() => onNavigateToTab('pengaturan')}
                     className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline inline-flex items-center space-x-1"
                   >
-                    <span>Buka Pengaturan Admin &rarr;</span>
+                    <span>Buka Pengaturan Instansi &rarr;</span>
                   </button>
                 )}
               </div>

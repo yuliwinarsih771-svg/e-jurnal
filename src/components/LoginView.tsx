@@ -10,8 +10,7 @@ import {
   ShieldCheck, 
   KeyRound,
   Database,
-  ArrowRight,
-  Check
+  ArrowRight
 } from 'lucide-react';
 import { Pegawai, PengaturanInstansi } from '../types';
 
@@ -19,6 +18,8 @@ interface LoginViewProps {
   allPegawai: Pegawai[];
   pengaturan: PengaturanInstansi;
   onLogin: (user: Pegawai) => void;
+  onDeletePegawai?: (pegawaiId: string) => void;
+  onPurgeDemoAccounts?: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -33,7 +34,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Normalize input string (remove spaces for comparison fallback)
+  // Normalize input string (remove spaces, dots, dashes for comparison fallback)
   const cleanStr = (val: string) => val.replace(/[\s.-]/g, '').toLowerCase();
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -42,7 +43,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
     const trimmedUsername = username.trim();
     if (!trimmedUsername) {
-      setErrorMsg('Silakan masukkan username Anda.');
+      setErrorMsg('Silakan masukkan username atau NIP Anda.');
       return;
     }
 
@@ -72,11 +73,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       if (!matched) {
         setIsLoading(false);
-        setErrorMsg('Username tidak terdaftar dalam basis data pegawai. Pastikan username sudah benar.');
+        setErrorMsg('Username atau akun tidak ditemukan dalam sistem. Pastikan data login sudah benar.');
         return;
       }
 
-      // Check password (default fallback if empty is '123', 'admin', or 'superadmin')
+      // Check password (fallback password for existing accounts if unset)
       const validPassword = matched.password || (matched.role === 'superadmin' ? 'superadmin' : matched.role === 'admin' ? 'admin' : '123');
       if (password !== validPassword) {
         setIsLoading(false);
@@ -87,28 +88,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
       // Successful login
       setIsLoading(false);
       onLogin(matched);
-    }, 400);
-  };
-
-  const handleApplyCredential = (peg: Pegawai) => {
-    const userAcc = peg.username || peg.nip;
-    const pwdAcc = peg.password || (peg.role === 'superadmin' ? 'superadmin' : peg.role === 'admin' ? 'admin' : '123');
-    setUsername(userAcc);
-    setPassword(pwdAcc);
-    setErrorMsg(null);
-  };
-
-  const handleQuickLogin = (peg: Pegawai) => {
-    handleApplyCredential(peg);
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin(peg);
     }, 350);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col justify-center py-10 sm:px-6 lg:px-8 font-['Plus_Jakarta_Sans',sans-serif] relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-['Plus_Jakarta_Sans',sans-serif] relative overflow-hidden">
       
       {/* Background decoration elements */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-40" />
@@ -165,7 +149,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             {/* Username Input */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Username <span className="text-red-500">*</span>
+                Username / NIP <span className="text-red-500">*</span>
               </label>
               <div className="relative rounded-xl shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -178,16 +162,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     setUsername(e.target.value);
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="Masukkan username akun Anda"
+                  placeholder="Masukkan username atau NIP Anda"
                   required
                   autoFocus
                   autoComplete="username"
                   className="block w-full pl-10 pr-3.5 py-2.5 sm:py-3 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
                 />
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Contoh: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-700 font-bold">superadmin</code> (Super Admin), <code className="bg-slate-100 px-1 py-0.5 rounded text-blue-700">trisnurini</code> (Pegawai), <code className="bg-slate-100 px-1 py-0.5 rounded text-amber-700">erwan</code> (Atasan), <code className="bg-slate-100 px-1 py-0.5 rounded text-purple-700">admin</code> (Admin)
-              </p>
             </div>
 
             {/* Password Input */}
@@ -196,9 +177,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <label className="block text-xs font-bold text-slate-700">
                   Password <span className="text-red-500">*</span>
                 </label>
-                <span className="text-[11px] text-slate-400">
-                  Sandi bawaan: <span className="font-mono font-bold text-slate-600">123</span> / <span className="font-mono font-bold text-slate-600">admin</span> / <span className="font-mono font-bold text-rose-600">superadmin</span>
-                </span>
               </div>
               <div className="relative rounded-xl shadow-xs">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -219,7 +197,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
                   title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -239,7 +217,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <span>Ingat sesi masuk di perangkat ini</span>
               </label>
               <span className="text-[11px] text-blue-600 font-medium hover:underline cursor-pointer">
-                Bantuan login?
+                Lupa password?
               </span>
             </div>
 
@@ -257,101 +235,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
               ) : (
                 <>
                   <LogIn className="w-4 h-4" />
-                  <span>Masuk dengan Username & Password</span>
+                  <span>Masuk ke Sistem</span>
                   <ArrowRight className="w-4 h-4 ml-1 opacity-70" />
                 </>
               )}
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-white text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                Daftar Akun Terdaftar (Username & Password)
-              </span>
-            </div>
-          </div>
-
-          {/* Quick Credential Cards */}
-          <div className="space-y-2">
-            <p className="text-[11px] text-slate-500 mb-2">
-              Pilih akun di bawah untuk mengisi username & password secara cepat:
-            </p>
-            
-            <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1">
-              {allPegawai.map((peg) => {
-                const uname = peg.username || (peg.nip.replace(/\s+/g, ''));
-                const pwd = peg.password || (peg.role === 'superadmin' ? 'superadmin' : peg.role === 'admin' ? 'admin' : '123');
-                const isSelected = username === uname;
-
-                return (
-                  <div
-                    key={peg.id}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border transition group ${
-                      isSelected 
-                        ? 'border-blue-500 bg-blue-50/70 ring-1 ring-blue-400' 
-                        : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2.5 min-w-0">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                        peg.role === 'superadmin' ? 'bg-rose-600' : peg.role === 'admin' ? 'bg-purple-600' : peg.role === 'atasan' ? 'bg-amber-600' : 'bg-blue-600'
-                      }`}>
-                        {peg.nama.charAt(0)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-slate-900 group-hover:text-blue-700 truncate">
-                            {peg.nama}
-                          </span>
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                            peg.role === 'superadmin'
-                              ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold'
-                              : peg.role === 'admin'
-                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                                : peg.role === 'atasan'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-300 font-extrabold'
-                                  : 'bg-blue-100 text-blue-700 border border-blue-200'
-                          }`}>
-                            {peg.role === 'superadmin' ? 'Super Admin (Khusus Pengaturan)' : peg.role === 'atasan' ? 'Atasan (Verifikasi)' : peg.role === 'admin' ? 'Administrator' : 'Pegawai'}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-600 truncate mt-0.5 flex items-center space-x-2">
-                          <span>Username: <strong className="font-mono text-blue-700">{uname}</strong></span>
-                          <span>•</span>
-                          <span>Password: <strong className="font-mono text-slate-700">{pwd}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-                      <button
-                        type="button"
-                        onClick={() => handleApplyCredential(peg)}
-                        title="Isi ke formulir login"
-                        className="text-[10px] px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold rounded-lg transition shadow-2xs cursor-pointer"
-                      >
-                        Pilih
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickLogin(peg)}
-                        title="Masuk langsung ke akun ini"
-                        className="text-[10px] px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition shadow-2xs cursor-pointer flex items-center space-x-1"
-                      >
-                        <span>Masuk</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
           {/* System Security Info */}
           <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
@@ -376,7 +265,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         </div>
 
       </div>
+
     </div>
   );
 };
-

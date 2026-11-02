@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   PRESENSI: 'ejurnal_presensi_v1',
   CURRENT_USER_ID: 'ejurnal_current_user_v1',
   AUTH_USER: 'ejurnal_auth_user_v1',
+  HIDE_LOGIN_QUICK_LIST: 'ejurnal_hide_login_quick_list_v1',
 };
 
 export const loadPengaturan = (): PengaturanInstansi => {
@@ -111,54 +112,75 @@ export const getPengaturanForUser = (
   return settings;
 };
 
+export const loadHideLoginQuickList = (): boolean => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.HIDE_LOGIN_QUICK_LIST) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const saveHideLoginQuickList = (hidden: boolean): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.HIDE_LOGIN_QUICK_LIST, hidden ? 'true' : 'false');
+  } catch (e) {
+    console.warn('Failed saving hide login quick list', e);
+  }
+};
+
 export const loadPegawai = (): Pegawai[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PEGAWAI);
-    if (raw) {
+    if (raw !== null) {
       const stored: Pegawai[] = JSON.parse(raw);
-      // Ensure all stored pegawai have password and username properties
-      let modified = false;
-      const normalized = stored.map((p) => {
-        let changed = false;
-        let password = p.password;
-        if (!password) {
-          password = p.role === 'superadmin' ? 'superadmin' : p.role === 'admin' ? 'admin' : '123';
-          changed = true;
-        }
-        let username = p.username;
-        if (!username) {
-          const initMatch = INITIAL_PEGAWAI.find((ip) => ip.id === p.id || ip.nip === p.nip);
-          if (initMatch?.username) {
-            username = initMatch.username;
-          } else if (p.email) {
-            username = p.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-          } else {
-            username = (p.nama.split(/[\s,.]+/)[0] || 'user').toLowerCase();
+      if (Array.isArray(stored)) {
+        // Normalize stored pegawai credentials without restoring deleted ones
+        let modified = false;
+        const normalized = stored.map((p) => {
+          let changed = false;
+          let password = p.password;
+          if (!password) {
+            password = p.role === 'superadmin' ? 'superadmin' : p.role === 'admin' ? 'admin' : '123';
+            changed = true;
           }
-          changed = true;
-        }
-        if (changed) {
-          modified = true;
-          return {
-            ...p,
-            password,
-            username,
-          };
-        }
-        return p;
-      });
+          let username = p.username;
+          if (!username) {
+            const initMatch = INITIAL_PEGAWAI.find((ip) => ip.id === p.id || ip.nip === p.nip);
+            if (initMatch?.username) {
+              username = initMatch.username;
+            } else if (p.email) {
+              username = p.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            } else {
+              username = (p.nama.split(/[\s,.]+/)[0] || 'user').toLowerCase();
+            }
+            changed = true;
+          }
+          if (changed) {
+            modified = true;
+            return {
+              ...p,
+              password,
+              username,
+            };
+          }
+          return p;
+        });
 
-      const existingIds = new Set(normalized.map((p) => p.id));
-      const missing = INITIAL_PEGAWAI.filter((p) => !existingIds.has(p.id));
-      if (missing.length > 0 || modified) {
-        const merged = [...normalized, ...missing];
-        localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(merged));
-        return merged;
+        if (modified) {
+          localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(normalized));
+        }
+        return normalized;
       }
-      return normalized;
     }
   } catch (e) {
     console.warn('Failed reading pegawai from storage', e);
+  }
+
+  // Only on initial setup if key was never created
+  try {
+    localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(INITIAL_PEGAWAI));
+  } catch (e) {
+    console.warn('Failed saving initial pegawai', e);
   }
   return INITIAL_PEGAWAI;
 };
@@ -167,22 +189,90 @@ export const savePegawai = (data: Pegawai[]): void => {
   localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(data));
 };
 
+export const deletePegawaiPermanentlyFromStorage = (pegawaiId: string): Pegawai[] => {
+  try {
+    const currentList = loadPegawai();
+    const updatedList = currentList.filter((p) => p.id !== pegawaiId);
+    localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(updatedList));
+
+    // Also clean up activities belonging to this employee
+    const currentKegiatan = loadKegiatan();
+    const updatedKegiatan = currentKegiatan.filter((k) => k.pegawaiId !== pegawaiId);
+    localStorage.setItem(STORAGE_KEYS.KEGIATAN, JSON.stringify(updatedKegiatan));
+
+    // Clean up from pengaturan map if exists
+    const mapRaw = localStorage.getItem(STORAGE_KEYS.PENGATURAN_MAP);
+    if (mapRaw) {
+      const map = JSON.parse(mapRaw);
+      if (map && map[pegawaiId]) {
+        delete map[pegawaiId];
+        localStorage.setItem(STORAGE_KEYS.PENGATURAN_MAP, JSON.stringify(map));
+      }
+    }
+
+    return updatedList;
+  } catch (e) {
+    console.warn('Failed deleting pegawai permanently', e);
+    return [];
+  }
+};
+
+export const purgeAllDemoAccountsFromStorage = (): Pegawai[] => {
+  try {
+    const currentList = loadPegawai();
+    // Keep only superadmin or any user with role superadmin
+    let retained = currentList.filter((p) => p.role === 'superadmin');
+    
+    // If no superadmin exists, ensure default superadmin is present
+    if (retained.length === 0) {
+      const superAdminDefault = INITIAL_PEGAWAI.find((p) => p.role === 'superadmin') || {
+        id: 'peg-superadmin',
+        nama: 'Super Administrator',
+        nip: '19750101 200001 1 001',
+        username: 'superadmin',
+        jabatan: 'Super Administrator Sistem',
+        unitKerja: 'BKPSDMD KAB. BELU',
+        pangkatGolongan: 'Pembina Utama Muda (IV/c)',
+        email: 'superadmin@belukab.go.id',
+        password: 'superadmin',
+        role: 'superadmin' as const,
+      };
+      retained = [superAdminDefault];
+    }
+
+    localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(retained));
+
+    // Remove activities of non-retained accounts
+    const currentKegiatan = loadKegiatan();
+    const retainedIds = new Set(retained.map((p) => p.id));
+    const updatedKegiatan = currentKegiatan.filter((k) => retainedIds.has(k.pegawaiId));
+    localStorage.setItem(STORAGE_KEYS.KEGIATAN, JSON.stringify(updatedKegiatan));
+
+    return retained;
+  } catch (e) {
+    console.warn('Failed purging demo accounts', e);
+    return [];
+  }
+};
+
 export const loadKegiatan = (): KegiatanJurnal[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.KEGIATAN);
-    if (raw) {
+    if (raw !== null) {
       const stored: KegiatanJurnal[] = JSON.parse(raw);
-      const existingIds = new Set(stored.map(k => k.id));
-      const missing = INITIAL_KEGIATAN.filter(k => !existingIds.has(k.id));
-      if (missing.length > 0) {
-        const merged = [...stored, ...missing];
-        localStorage.setItem(STORAGE_KEYS.KEGIATAN, JSON.stringify(merged));
-        return merged;
+      if (Array.isArray(stored)) {
+        return stored;
       }
-      return stored;
     }
   } catch (e) {
     console.warn('Failed reading kegiatan from storage', e);
+  }
+
+  // Only on initial setup if key was never created
+  try {
+    localStorage.setItem(STORAGE_KEYS.KEGIATAN, JSON.stringify(INITIAL_KEGIATAN));
+  } catch (e) {
+    console.warn('Failed saving initial kegiatan', e);
   }
   return INITIAL_KEGIATAN;
 };
@@ -239,4 +329,5 @@ export const resetAllData = (): void => {
   localStorage.removeItem(STORAGE_KEYS.PRESENSI);
   localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
   localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
+  localStorage.removeItem(STORAGE_KEYS.HIDE_LOGIN_QUICK_LIST);
 };

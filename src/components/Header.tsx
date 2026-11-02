@@ -160,45 +160,47 @@ export const Header: React.FC<HeaderProps> = ({
                   className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2"
                   onClick={() => setDropdownOpen(false)}
                 >
-                  <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pilih Akun / Peran:</p>
+                  <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Akun & Peran Pengguna:
+                    </p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Uji coba sistem dari sudut pandang Pegawai, Atasan, Admin, atau Super Admin.
+                      Pemilik akun resmi yang sedang aktif masuk sistem.
                     </p>
                   </div>
-                  <div className="py-1">
-                    {allPegawai.map((peg) => {
-                      const isSelected = peg.id === currentPegawai.id;
-                      return (
-                        <button
-                          key={peg.id}
-                          onClick={() => onSelectPegawai(peg)}
-                          className={`w-full text-left px-4 py-2.5 flex items-start space-x-3 transition hover:bg-slate-50 ${
-                            isSelected ? 'bg-blue-50/70 border-l-4 border-blue-600' : ''
-                          }`}
-                        >
-                          <div className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5 ${
-                            peg.role === 'superadmin' ? 'bg-rose-600' : peg.role === 'admin' ? 'bg-purple-600' : peg.role === 'atasan' ? 'bg-amber-600' : 'bg-blue-600'
-                          }`}>
-                            {peg.nama.charAt(0)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-900 truncate">
-                                {peg.nama}
-                              </span>
-                              {getRoleBadge(peg.role)}
-                            </div>
-                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                              {peg.jabatan}
-                            </p>
-                            <p className="text-[10px] text-slate-400 font-mono">
-                              NIP. {peg.nip}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <div className="p-3">
+                    <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200/80 flex items-start space-x-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5 shadow-2xs ${
+                        currentPegawai.role === 'superadmin' ? 'bg-rose-600' : currentPegawai.role === 'admin' ? 'bg-purple-600' : currentPegawai.role === 'atasan' ? 'bg-amber-600' : 'bg-blue-600'
+                      }`}>
+                        {currentPegawai.foto ? (
+                          <img src={currentPegawai.foto} alt={currentPegawai.nama} className="w-full h-full object-cover rounded-xl" />
+                        ) : (
+                          currentPegawai.nama.charAt(0)
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-bold text-slate-900 truncate">
+                            {currentPegawai.nama}
+                          </span>
+                        </div>
+                        <div className="mt-1">
+                          {getRoleBadge(currentPegawai.role)}
+                        </div>
+                        <p className="text-[11px] text-slate-600 truncate mt-1 font-medium">
+                          {currentPegawai.jabatan}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          NIP. {currentPegawai.nip}
+                        </p>
+                        <div className="mt-1.5 flex items-center space-x-1.5">
+                          <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-slate-200 text-blue-700 font-mono font-bold">
+                            @{currentPegawai.username || 'user'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50 text-[11px] text-slate-500 flex items-center justify-between">
                     <span>Instansi: {pengaturan.kotaPenetapan}</span>

@@ -310,7 +310,7 @@ export const RekapitulasiView: React.FC<RekapitulasiViewProps> = ({
                 >
                   {allPegawai.map((peg) => (
                     <option key={peg.id} value={peg.id}>
-                      {peg.nama} ({peg.role})
+                      {peg.nama}
                     </option>
                   ))}
                 </select>

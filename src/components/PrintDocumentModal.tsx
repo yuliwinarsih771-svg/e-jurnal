@@ -167,7 +167,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
                 >
                   {allPegawai.map((p) => (
                     <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                      {p.nama} ({p.role})
+                      {p.nama}
                     </option>
                   ))}
                 </select>

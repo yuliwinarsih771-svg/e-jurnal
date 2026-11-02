@@ -38,6 +38,8 @@ import {
   loadAuthUser,
   saveAuthUser,
   resetAllData,
+  deletePegawaiPermanentlyFromStorage,
+  purgeAllDemoAccountsFromStorage,
 } from './utils/storage';
 
 export default function App() {
@@ -388,6 +390,30 @@ export default function App() {
     window.location.reload();
   };
 
+  // Permanent account deletion handlers
+  const handleDeletePegawaiPermanently = (pegId: string) => {
+    const updated = deletePegawaiPermanentlyFromStorage(pegId);
+    setPegawaiList(updated);
+    setKegiatanList((prev) => prev.filter((k) => k.pegawaiId !== pegId));
+    if (selectedPegawaiId === pegId) {
+      setSelectedPegawaiId(updated[0]?.id || '');
+    }
+    if (authUser && authUser.id === pegId) {
+      handleLogout();
+    }
+  };
+
+  const handlePurgeDemoAccounts = () => {
+    const updated = purgeAllDemoAccountsFromStorage();
+    setPegawaiList(updated);
+    const retainedIds = new Set(updated.map((p) => p.id));
+    setKegiatanList((prev) => prev.filter((k) => retainedIds.has(k.pegawaiId)));
+    setSelectedPegawaiId(updated[0]?.id || '');
+    if (authUser && !retainedIds.has(authUser.id)) {
+      handleLogout();
+    }
+  };
+
   // Render Login Screen if no authenticated user session
   if (!authUser) {
     return (
@@ -395,6 +421,8 @@ export default function App() {
         allPegawai={pegawaiList}
         pengaturan={pengaturanMap['default'] || INITIAL_PENGATURAN}
         onLogin={handleLogin}
+        onDeletePegawai={handleDeletePegawaiPermanently}
+        onPurgeDemoAccounts={handlePurgeDemoAccounts}
       />
     );
   }
