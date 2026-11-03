@@ -35,7 +35,7 @@ interface ProfilSuperAdminViewProps {
   pengaturan: PengaturanInstansi;
   kegiatanList: KegiatanJurnal[];
   onUpdateProfile: (updatedData: Partial<Pegawai>) => void;
-  onNavigateToTab?: (tab: 'monitoring' | 'jurnal' | 'rekapitulasi' | 'cetak' | 'pengaturan') => void;
+  onNavigateToTab?: (tab: 'monitoring' | 'jurnal' | 'rekapitulasi' | 'cetak') => void;
 }
 
 export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
@@ -66,13 +66,24 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
 
   // Success message notification
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'profil' | 'keamanan' | 'wewenang'>('profil');
+  const [activeSubTab, setActiveSubTab] = useState<'profil' | 'keamanan' | 'akun' | 'wewenang'>('profil');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Hidden file input for avatar upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Stats calculation
   const totalPegawaiCount = allPegawai.length;
+  const filteredPegawai = allPegawai.filter((p) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      p.nama.toLowerCase().includes(q) ||
+      p.nip.toLowerCase().includes(q) ||
+      (p.username && p.username.toLowerCase().includes(q)) ||
+      p.jabatan.toLowerCase().includes(q) ||
+      p.unitKerja.toLowerCase().includes(q)
+    );
+  });
   const totalKegiatanCount = kegiatanList.length;
   const pendingCount = kegiatanList.filter((k) => k.statusValidasi === 'Menunggu').length;
   const approvedCount = kegiatanList.filter((k) => k.statusValidasi === 'Disetujui').length;
@@ -273,6 +284,22 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
           >
             <Lock className="w-4 h-4" />
             <span>Keamanan & Sandi</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('akun')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+              activeSubTab === 'akun'
+                ? 'bg-rose-600 text-white shadow-md'
+                : 'bg-white/10 text-rose-200 hover:bg-white/15'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Nama-Nama Akun ({totalPegawaiCount})</span>
+            <span className="text-[10px] bg-rose-900/60 text-rose-200 px-1.5 py-0.5 rounded-full font-extrabold uppercase">
+              Khusus Super Admin
+            </span>
           </button>
 
           <button
@@ -581,6 +608,127 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
         </div>
       )}
 
+      {/* SUB-TAB: Nama-Nama Akun (Khusus Super Admin) */}
+      {activeSubTab === 'akun' && (
+        <div className="space-y-6 animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-xs border border-slate-200 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 gap-3">
+              <div>
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-rose-100 text-rose-800 border border-rose-200 flex items-center space-x-1">
+                    <ShieldCheck className="w-3 h-3 text-rose-600" />
+                    <span>Hanya Tampil di Super Admin</span>
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                  <Users className="w-5 h-5 text-rose-600" />
+                  <span>Daftar Nama-Nama Akun Pengguna</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Seluruh akun ASN, PPPK, dan staf instansi di database Firebase. Sesuai hak akses, daftar ini hanya dimunculkan untuk Super Admin.
+                </p>
+              </div>
+
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari nama akun atau NIP..."
+                  className="w-full text-xs px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-rose-500 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Table Nama-Nama Akun */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100/80 text-slate-700 border-b border-slate-200 font-bold">
+                    <th className="py-2.5 px-3">Nama Akun & NIP</th>
+                    <th className="py-2.5 px-3">Jabatan & Pangkat</th>
+                    <th className="py-2.5 px-3">Unit Kerja</th>
+                    <th className="py-2.5 px-3 text-center">Peran</th>
+                    <th className="py-2.5 px-3 text-center">Username Login</th>
+                    <th className="py-2.5 px-3 text-center w-28">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {filteredPegawai.map((peg) => (
+                    <tr key={peg.id} className="hover:bg-slate-50 transition">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center space-x-2.5">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 ${
+                            peg.role === 'superadmin' ? 'bg-rose-600' : peg.role === 'admin' ? 'bg-purple-600' : peg.role === 'atasan' ? 'bg-amber-600' : 'bg-blue-600'
+                          }`}>
+                            {peg.nama.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{peg.nama}</div>
+                            <div className="text-[11px] font-mono text-slate-500">NIP. {peg.nip}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="font-medium text-slate-800">{peg.jabatan}</div>
+                        <div className="text-[10px] text-slate-500">{peg.pangkatGolongan}</div>
+                      </td>
+                      <td className="py-3 px-3 text-slate-700">
+                        {peg.unitKerja}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          peg.role === 'superadmin' ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold' :
+                          peg.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                          peg.role === 'atasan' ? 'bg-amber-100 text-amber-800' :
+                          'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {peg.role === 'superadmin' ? 'Super Admin' : peg.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span className="font-mono text-[11px] px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-md text-blue-700 font-bold">
+                          @{peg.username || (peg.nip.replace(/\s+/g, ''))}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          {onNavigateToTab && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToTab('jurnal')}
+                              className="px-2 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition cursor-pointer"
+                            >
+                              Jurnal
+                            </button>
+                          )}
+                          {onNavigateToTab && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToTab('cetak')}
+                              className="px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition cursor-pointer"
+                            >
+                              Cetak
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredPegawai.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                        Tidak ada akun pegawai yang sesuai dengan pencarian "{searchQuery}".
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SUB-TAB 3: Hak Akses & Privilese Super Admin */}
       {activeSubTab === 'wewenang' && (
         <div className="space-y-6">
@@ -656,25 +804,6 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
                     className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline inline-flex items-center space-x-1"
                   >
                     <span>Buka Pratinjau Cetak / PDF &rarr;</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-rose-300 transition space-y-2">
-                <div className="flex items-center space-x-2 text-rose-700 font-bold text-xs">
-                  <Settings className="w-4 h-4 text-rose-600" />
-                  <span>Pengaturan Instansi & Pejabat Penilai</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Mengatur kop surat resmi, logo instansi, serta pejabat penilai kinerja untuk masing-masing akun pegawai maupun templat baku instansi.
-                </p>
-                {onNavigateToTab && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigateToTab('pengaturan')}
-                    className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline inline-flex items-center space-x-1"
-                  >
-                    <span>Buka Pengaturan Instansi &rarr;</span>
                   </button>
                 )}
               </div>

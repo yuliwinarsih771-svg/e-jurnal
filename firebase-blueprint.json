@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "Pegawai": {
+      "title": "Pegawai",
+      "description": "Data pegawai instansi ASN/PPPK/Non-ASN beserta peran dan kredensial",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nama": { "type": "string" },
+        "nip": { "type": "string" },
+        "username": { "type": "string" },
+        "jabatan": { "type": "string" },
+        "unitKerja": { "type": "string" },
+        "pangkatGolongan": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["pegawai", "atasan", "admin", "superadmin"] },
+        "password": { "type": "string" },
+        "foto": { "type": "string" },
+        "atasanId": { "type": "string" },
+        "noHp": { "type": "string" }
+      },
+      "required": ["id", "nama", "nip", "jabatan", "unitKerja", "role"]
+    },
+    "KegiatanJurnal": {
+      "title": "KegiatanJurnal",
+      "description": "Catatan aktivitas harian kinerja pegawai",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pegawaiId": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "hari": { "type": "string" },
+        "nomorKegiatan": { "type": "string" },
+        "waktuMulai": { "type": "string" },
+        "waktuSelesai": { "type": "string" },
+        "kegiatan": { "type": "string" },
+        "outputHasil": { "type": "string" },
+        "statusValidasi": { "type": "string", "enum": ["Menunggu", "Disetujui", "Ditolak"] },
+        "catatanAtasan": { "type": "string" },
+        "tanggalValidasi": { "type": "string" },
+        "namaValidator": { "type": "string" },
+        "nipValidator": { "type": "string" },
+        "tautanBukti": { "type": "string" }
+      },
+      "required": ["id", "pegawaiId", "tanggal", "waktuMulai", "waktuSelesai", "kegiatan", "outputHasil", "statusValidasi"]
+    },
+    "PresensiRecord": {
+      "title": "PresensiRecord",
+      "description": "Rekap data kehadiran harian pegawai",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pegawaiId": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "hari": { "type": "string" },
+        "jamMasuk": { "type": "string" },
+        "jamPulang": { "type": "string" },
+        "status": { "type": "string", "enum": ["Hadir", "WFH", "Dinas Luar", "Izin", "Sakit", "Cuti"] },
+        "keterangan": { "type": "string" },
+        "lokasi": { "type": "string" },
+        "terlambatMenit": { "type": "number" },
+        "fotoBukti": { "type": "string" }
+      },
+      "required": ["id", "pegawaiId", "tanggal", "jamMasuk", "status"]
+    },
+    "PengaturanInstansi": {
+      "title": "PengaturanInstansi",
+      "description": "Konfigurasi identitas dinas, kop surat, logo, dan pejabat penilai",
+      "type": "object",
+      "properties": {
+        "namaInstansi": { "type": "string" },
+        "badanDinas": { "type": "string" },
+        "bidangBagian": { "type": "string" },
+        "alamat": { "type": "string" },
+        "kotaPenetapan": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "judulDokumen": { "type": "string" },
+        "subJudulDokumen": { "type": "string" },
+        "namaAtasan": { "type": "string" },
+        "nipAtasan": { "type": "string" },
+        "jabatanAtasan": { "type": "string" },
+        "pangkatAtasan": { "type": "string" },
+        "jamMasukNormal": { "type": "string" },
+        "jamPulangNormal": { "type": "string" },
+        "toleransiKeterlambatanMenit": { "type": "number" }
+      },
+      "required": ["namaInstansi", "badanDinas", "alamat", "kotaPenetapan", "judulDokumen", "namaAtasan", "nipAtasan"]
+    }
+  },
+  "firestore": {
+    "/pegawai/{pegawaiId}": {
+      "schema": "Pegawai",
+      "description": "Daftar pegawai dan akun pengguna"
+    },
+    "/jurnal_harian/{jurnalId}": {
+      "schema": "KegiatanJurnal",
+      "description": "Catatan log kegiatan harian pegawai"
+    },
+    "/presensi/{presensiId}": {
+      "schema": "PresensiRecord",
+      "description": "Rekam jejak kehadiran harian"
+    },
+    "/pengaturan/{docId}": {
+      "schema": "PengaturanInstansi",
+      "description": "Pengaturan instansi dan profil cetak per akun atau templat baku"
+    }
+  }
+}

@@ -105,6 +105,15 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
+            {/* Firebase Cloud DB Badge */}
+            <div 
+              className="hidden xl:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
+              title="Database cloud aktif: Firebase Firestore"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Firebase Firestore</span>
+            </div>
+
             {/* Guide & DB Docs Button */}
             <div className="flex items-center space-x-1">
               <button
@@ -202,9 +211,64 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Khusus Super Admin: Munculkan daftar nama-nama akun */}
+                  {currentPegawai.role === 'superadmin' && allPegawai && allPegawai.length > 0 && (
+                    <div className="border-t border-slate-100 py-1.5 bg-slate-50/40">
+                      <div className="px-3 py-1 flex items-center justify-between">
+                        <p className="text-[10px] font-extrabold text-rose-700 uppercase tracking-wider flex items-center space-x-1">
+                          <ShieldCheck className="w-3 h-3 text-rose-600" />
+                          <span>Nama-Nama Akun (Khusus Super Admin):</span>
+                        </p>
+                        <span className="text-[9px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded-full">
+                          {allPegawai.length} Akun
+                        </span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 px-1">
+                        {allPegawai.map((peg) => {
+                          const isSelected = peg.id === currentPegawai.id;
+                          return (
+                            <button
+                              key={peg.id}
+                              type="button"
+                              onClick={() => {
+                                setDropdownOpen(false);
+                                onSelectPegawai(peg);
+                              }}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center space-x-2 transition cursor-pointer hover:bg-slate-100 ${
+                                isSelected ? 'bg-rose-50/80 font-bold border-l-2 border-rose-600' : ''
+                              }`}
+                            >
+                              <div className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold text-white shrink-0 ${
+                                peg.role === 'superadmin' ? 'bg-rose-600' : peg.role === 'admin' ? 'bg-purple-600' : peg.role === 'atasan' ? 'bg-amber-600' : 'bg-blue-600'
+                              }`}>
+                                {peg.nama.charAt(0)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-xs text-slate-800 truncate font-semibold">
+                                    {peg.nama}
+                                  </span>
+                                  <span className={`text-[9px] px-1 py-0.2 rounded font-bold uppercase ${
+                                    peg.role === 'superadmin' ? 'bg-rose-100 text-rose-700 font-extrabold' : 'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {peg.role}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50 text-[11px] text-slate-500 flex items-center justify-between">
-                    <span>Instansi: {pengaturan.kotaPenetapan}</span>
-                    <span className="font-semibold text-blue-600">Terautentikasi</span>
+                    <span>Database: Firebase Firestore</span>
+                    <span className="font-semibold text-emerald-600 flex items-center space-x-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>Realtime Online</span>
+                    </span>
                   </div>
 
                   <div className="p-1 border-t border-slate-100 space-y-0.5">

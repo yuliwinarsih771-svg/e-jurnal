@@ -41,6 +41,21 @@ import {
   deletePegawaiPermanentlyFromStorage,
   purgeAllDemoAccountsFromStorage,
 } from './utils/storage';
+import {
+  seedInitialDataIfFirestoreEmpty,
+  subscribePegawaiFirestore,
+  subscribeJurnalFirestore,
+  subscribePresensiFirestore,
+  subscribePengaturanFirestore,
+  saveKegiatanToFirestore,
+  deleteKegiatanFromFirestore,
+  savePresensiToFirestore,
+  savePengaturanToFirestore,
+  syncAllPengaturanMapToFirestore,
+  deletePegawaiFromFirestore,
+  syncAllPegawaiToFirestore,
+  savePegawaiToFirestore,
+} from './services/firebaseDb';
 
 export default function App() {
   // Application State - Independent per-account settings map
@@ -53,6 +68,7 @@ export default function App() {
   });
   const [kegiatanList, setKegiatanList] = useState<KegiatanJurnal[]>(loadKegiatan);
   const [presensiList, setPresensiList] = useState<PresensiRecord[]>(loadPresensi);
+  const [isFirebaseSynced, setIsFirebaseSynced] = useState<boolean>(false);
 
   // Navigation & Filtering
   const [activeTab, setActiveTab] = useState<NavTab>('jurnal');
@@ -67,7 +83,52 @@ export default function App() {
   const [isLaravelDocsOpen, setIsLaravelDocsOpen] = useState<boolean>(false);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
 
-  // Sync settings map with storage
+  // 1. Initial Firestore Auto-Seed & Live Subscription
+  useEffect(() => {
+    let isMounted = true;
+
+    // Seed or fetch from Firebase Firestore on startup
+    seedInitialDataIfFirestoreEmpty()
+      .then((res) => {
+        if (!isMounted) return;
+        if (res.seeded) {
+          if (res.pegawai && res.pegawai.length > 0) setPegawaiList(res.pegawai);
+          if (res.kegiatan) setKegiatanList(res.kegiatan);
+          if (res.presensi) setPresensiList(res.presensi);
+          if (res.pengaturanMap && Object.keys(res.pengaturanMap).length > 0) {
+            setPengaturanMap(res.pengaturanMap);
+          }
+          setIsFirebaseSynced(true);
+        }
+      })
+      .catch((err) => {
+        console.warn('Firebase initial seed notice:', err);
+      });
+
+    // Realtime subscriptions
+    const unsubPegawai = subscribePegawaiFirestore((livePegawai) => {
+      if (livePegawai.length > 0) setPegawaiList(livePegawai);
+    });
+    const unsubJurnal = subscribeJurnalFirestore((liveJurnal) => {
+      setKegiatanList(liveJurnal);
+    });
+    const unsubPresensi = subscribePresensiFirestore((livePresensi) => {
+      setPresensiList(livePresensi);
+    });
+    const unsubPengaturan = subscribePengaturanFirestore((liveMap) => {
+      if (Object.keys(liveMap).length > 0) setPengaturanMap(liveMap);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubPegawai();
+      unsubJurnal();
+      unsubPresensi();
+      unsubPengaturan();
+    };
+  }, []);
+
+  // Sync settings map with local storage as backup cache
   useEffect(() => {
     saveAllPengaturanMap(pengaturanMap);
   }, [pengaturanMap]);
@@ -133,6 +194,9 @@ export default function App() {
         [targetId]: newSettings,
       };
       saveAllPengaturanMap(updated);
+      savePengaturanToFirestore(targetId, newSettings).catch((err) => {
+        console.warn('Firestore settings sync notice:', err);
+      });
       return updated;
     });
   };
@@ -147,6 +211,9 @@ export default function App() {
         updated[p.id] = { ...newSettings };
       });
       saveAllPengaturanMap(updated);
+      syncAllPengaturanMapToFirestore(updated).catch((err) => {
+        console.warn('Firestore settings batch sync notice:', err);
+      });
       return updated;
     });
   };
@@ -161,7 +228,7 @@ export default function App() {
         setActiveTab('verifikasi');
       }
     } else if (currentPegawai.role === 'superadmin') {
-      if (activeTab === 'verifikasi') {
+      if (activeTab === 'verifikasi' || activeTab === 'pengaturan') {
         setActiveTab('monitoring');
       }
     } else {
@@ -275,16 +342,17 @@ export default function App() {
     }
 
     if (editId) {
+      const existing = kegiatanList.find((k) => k.id === editId);
+      const updated: KegiatanJurnal = {
+        ...(existing || { id: editId, statusValidasi: 'Menunggu' as const, pegawaiId: targetPegawai.id }),
+        ...data,
+      };
       setKegiatanList((prev) =>
-        prev.map((item) =>
-          item.id === editId
-            ? {
-                ...item,
-                ...data,
-              }
-            : item
-        )
+        prev.map((item) => (item.id === editId ? updated : item))
       );
+      saveKegiatanToFirestore(updated).catch((err) => {
+        console.warn('Firestore kegiatan sync notice:', err);
+      });
     } else {
       const newKegiatan: KegiatanJurnal = {
         id: `keg-${Date.now()}`,
@@ -292,6 +360,9 @@ export default function App() {
         statusValidasi: 'Menunggu',
       };
       setKegiatanList((prev) => [newKegiatan, ...prev]);
+      saveKegiatanToFirestore(newKegiatan).catch((err) => {
+        console.warn('Firestore kegiatan new sync notice:', err);
+      });
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
     }
   };
@@ -303,10 +374,16 @@ export default function App() {
 
   const handleDeleteKegiatan = (id: string) => {
     setKegiatanList((prev) => prev.filter((k) => k.id !== id));
+    deleteKegiatanFromFirestore(id).catch((err) => {
+      console.warn('Firestore delete notice:', err);
+    });
   };
 
   const handleBatchDeleteKegiatan = (ids: string[]) => {
     setKegiatanList((prev) => prev.filter((k) => !ids.includes(k.id)));
+    ids.forEach((id) => {
+      deleteKegiatanFromFirestore(id).catch(() => {});
+    });
   };
 
   // Presensi Handler
@@ -320,6 +397,9 @@ export default function App() {
       }
       return [...prev, newRecord];
     });
+    savePresensiToFirestore(newRecord).catch((err) => {
+      console.warn('Firestore presensi sync notice:', err);
+    });
   };
 
   // Verifikasi Atasan
@@ -331,34 +411,35 @@ export default function App() {
     const validatorNama = currentPegawai.role === 'atasan' ? currentPegawai.nama : (staffPengaturan.namaAtasan || currentPegawai.nama);
     const validatorNip = currentPegawai.role === 'atasan' ? currentPegawai.nip : (staffPengaturan.nipAtasan || currentPegawai.nip);
 
-    setKegiatanList((prev) =>
-      prev.map((k) =>
-        k.id === id
-          ? {
-              ...k,
-              statusValidasi: 'Disetujui',
-              catatanAtasan: catatan || k.catatanAtasan,
-              tanggalValidasi: dateStr,
-              namaValidator: validatorNama,
-              nipValidator: validatorNip,
-            }
-          : k
-      )
-    );
+    if (targetItem) {
+      const updated: KegiatanJurnal = {
+        ...targetItem,
+        statusValidasi: 'Disetujui',
+        catatanAtasan: catatan || targetItem.catatanAtasan,
+        tanggalValidasi: dateStr,
+        namaValidator: validatorNama,
+        nipValidator: validatorNip,
+      };
+      setKegiatanList((prev) =>
+        prev.map((k) => (k.id === id ? updated : k))
+      );
+      saveKegiatanToFirestore(updated).catch(() => {});
+    }
   };
 
   const handleRejectKegiatan = (id: string, catatan: string) => {
-    setKegiatanList((prev) =>
-      prev.map((k) =>
-        k.id === id
-          ? {
-              ...k,
-              statusValidasi: 'Ditolak',
-              catatanAtasan: catatan,
-            }
-          : k
-      )
-    );
+    const targetItem = kegiatanList.find((k) => k.id === id);
+    if (targetItem) {
+      const updated: KegiatanJurnal = {
+        ...targetItem,
+        statusValidasi: 'Ditolak',
+        catatanAtasan: catatan,
+      };
+      setKegiatanList((prev) =>
+        prev.map((k) => (k.id === id ? updated : k))
+      );
+      saveKegiatanToFirestore(updated).catch(() => {});
+    }
   };
 
   const handleBatchApprove = (ids: string[]) => {
@@ -370,17 +451,20 @@ export default function App() {
     const validatorNip = currentPegawai.role === 'atasan' ? currentPegawai.nip : (staffPengaturan.nipAtasan || currentPegawai.nip);
 
     setKegiatanList((prev) =>
-      prev.map((k) =>
-        ids.includes(k.id)
-          ? {
-              ...k,
-              statusValidasi: 'Disetujui',
-              tanggalValidasi: dateStr,
-              namaValidator: validatorNama,
-              nipValidator: validatorNip,
-            }
-          : k
-      )
+      prev.map((k) => {
+        if (ids.includes(k.id)) {
+          const updated: KegiatanJurnal = {
+            ...k,
+            statusValidasi: 'Disetujui',
+            tanggalValidasi: dateStr,
+            namaValidator: validatorNama,
+            nipValidator: validatorNip,
+          };
+          saveKegiatanToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return k;
+      })
     );
   };
 
@@ -394,6 +478,9 @@ export default function App() {
   const handleDeletePegawaiPermanently = (pegId: string) => {
     const updated = deletePegawaiPermanentlyFromStorage(pegId);
     setPegawaiList(updated);
+    deletePegawaiFromFirestore(pegId).catch((err) => {
+      console.warn('Firestore delete employee notice:', err);
+    });
     setKegiatanList((prev) => prev.filter((k) => k.pegawaiId !== pegId));
     if (selectedPegawaiId === pegId) {
       setSelectedPegawaiId(updated[0]?.id || '');
@@ -406,6 +493,9 @@ export default function App() {
   const handlePurgeDemoAccounts = () => {
     const updated = purgeAllDemoAccountsFromStorage();
     setPegawaiList(updated);
+    syncAllPegawaiToFirestore(updated).catch((err) => {
+      console.warn('Firestore purge sync notice:', err);
+    });
     const retainedIds = new Set(updated.map((p) => p.id));
     setKegiatanList((prev) => prev.filter((k) => retainedIds.has(k.pegawaiId)));
     setSelectedPegawaiId(updated[0]?.id || '');
@@ -449,7 +539,7 @@ export default function App() {
           if (currentPegawai.role === 'superadmin') {
             if (tab === 'cetak') {
               setIsPrintModalOpen(true);
-            } else {
+            } else if (tab !== 'pengaturan') {
               setActiveTab(tab);
             }
             return;
@@ -559,7 +649,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'pengaturan' && (
+        {activeTab === 'pengaturan' && currentPegawai.role !== 'superadmin' && (
           <PengaturanAdminView
             pengaturanMap={pengaturanMap}
             currentPegawai={currentPegawai}
@@ -570,6 +660,7 @@ export default function App() {
             pegawaiList={pegawaiList}
             onSavePegawaiList={(newList) => {
               setPegawaiList(newList);
+              syncAllPegawaiToFirestore(newList).catch(() => {});
               setPengaturanMap((prev) => {
                 let changed = false;
                 const copy = { ...prev };
@@ -584,6 +675,7 @@ export default function App() {
                 });
                 if (changed) {
                   saveAllPengaturanMap(copy);
+                  syncAllPengaturanMapToFirestore(copy).catch(() => {});
                   return copy;
                 }
                 return prev;
@@ -599,7 +691,7 @@ export default function App() {
               }
             }}
             onResetData={handleResetData}
-            isSuperAdmin={currentPegawai.role === 'superadmin'}
+            isSuperAdmin={false}
             initialSelectedAccountId={currentPegawai.id}
             onGoToProfile={() => setActiveTab('profil')}
           />
@@ -623,19 +715,28 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-4 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-          <div>
-            <strong>{currentPengaturan.namaInstansi}</strong> &bull; {currentPengaturan.badanDinas}
+      {/* Footer with Firebase Cloud Database Status */}
+      <footer className="bg-white border-t border-slate-200 py-3.5 print:hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2.5">
+          <div className="flex items-center space-x-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="font-bold text-slate-800">Database: Firebase Firestore</span>
+            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-200 px-2 py-0.5 rounded-full flex items-center space-x-1">
+              <span>Cloud Realtime Aktif</span>
+            </span>
           </div>
-          <div className="flex items-center space-x-3">
-            <span>Sistem E-Jurnal Harian Pegawai</span>
+
+          <div className="flex items-center space-x-3 text-[11px] text-slate-500">
+            <span>{currentPengaturan.namaInstansi}</span>
+            <span>&bull;</span>
             <button
               onClick={() => setIsLaravelDocsOpen(true)}
               className="text-blue-600 hover:underline font-semibold"
             >
-              Arsitektur Laravel/MySQL
+              Panduan Arsitektur API
             </button>
           </div>
         </div>

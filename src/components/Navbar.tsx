@@ -67,13 +67,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           badge: null,
         },
         {
-          id: 'pengaturan' as NavTab,
-          label: 'Pengaturan Admin',
-          shortLabel: 'Pengaturan',
-          icon: Settings,
-          badge: null,
-        },
-        {
           id: 'profil' as NavTab,
           label: 'Profil Super Admin',
           shortLabel: 'Profil',
