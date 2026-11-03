@@ -17,6 +17,7 @@ import { LaravelApiGuideModal } from './components/LaravelApiGuideModal';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { LoginView } from './components/LoginView';
 import { ProfilSuperAdminView } from './components/ProfilSuperAdminView';
+import { TambahUserView } from './components/TambahUserView';
 
 import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord } from './types';
 import { INITIAL_PENGATURAN } from './data/initialData';
@@ -286,6 +287,11 @@ export default function App() {
       return updated;
     });
 
+    const updatedUser = { ...currentPegawai, ...updatedData };
+    savePegawaiToFirestore(updatedUser).catch((err) => {
+      console.warn('Firestore profile update notice:', err);
+    });
+
     setAuthUser((prev) => {
       if (!prev) return null;
       const updated = { ...prev, ...updatedData };
@@ -305,6 +311,13 @@ export default function App() {
       savePegawai(updated);
       return updated;
     });
+
+    const target = pegawaiList.find((p) => p.id === pegId);
+    if (target) {
+      savePegawaiToFirestore({ ...target, ...updatedData }).catch((err) => {
+        console.warn('Firestore employee profile update notice:', err);
+      });
+    }
 
     if (authUser && authUser.id === pegId) {
       const updatedAuth = { ...authUser, ...updatedData };
@@ -504,6 +517,35 @@ export default function App() {
     }
   };
 
+  const handleAddPegawai = async (newPegawai: Pegawai) => {
+    // 1. Add to local state & storage
+    const updatedList = [...pegawaiList, newPegawai];
+    setPegawaiList(updatedList);
+    savePegawai(updatedList);
+
+    // 2. Add individual pengaturan for new user
+    setPengaturanMap((prev) => {
+      const basePengaturan = prev['default'] || (currentPegawai ? prev[currentPegawai.id] : undefined) || INITIAL_PENGATURAN;
+      const copy: Record<string, PengaturanInstansi> = {
+        ...prev,
+        [newPegawai.id]: {
+          ...basePengaturan,
+          bidangBagian: newPegawai.unitKerja || basePengaturan.bidangBagian,
+        },
+      };
+      saveAllPengaturanMap(copy);
+      syncAllPengaturanMapToFirestore(copy).catch(console.error);
+      return copy;
+    });
+
+    // 3. Persist new account directly to Firebase Firestore
+    try {
+      await savePegawaiToFirestore(newPegawai);
+    } catch (err) {
+      console.error('Gagal menyimpan user akun baru ke Firestore:', err);
+    }
+  };
+
   // Render Login Screen if no authenticated user session
   if (!authUser) {
     return (
@@ -697,6 +739,14 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'tambah-user' && currentPegawai.role === 'superadmin' && (
+          <TambahUserView
+            allPegawai={pegawaiList}
+            onAddPegawai={handleAddPegawai}
+            onNavigateToAccounts={() => setActiveTab('profil')}
+          />
+        )}
+
         {activeTab === 'profil' && (
           <ProfilSuperAdminView
             currentPegawai={currentPegawai}
@@ -704,6 +754,7 @@ export default function App() {
             pengaturan={currentPengaturan}
             kegiatanList={kegiatanList}
             onUpdateProfile={handleUpdateProfile}
+            onAddPegawai={handleAddPegawai}
             onNavigateToTab={(tab) => {
               if (tab === 'cetak') {
                 setIsPrintModalOpen(true);

@@ -24,10 +24,12 @@ import {
   Database,
   Users,
   Clock,
-  Printer
+  Printer,
+  UserPlus
 } from 'lucide-react';
 import { Pegawai, PengaturanInstansi, KegiatanJurnal } from '../types';
 import confetti from 'canvas-confetti';
+import { TambahUserView } from './TambahUserView';
 
 interface ProfilSuperAdminViewProps {
   currentPegawai: Pegawai;
@@ -35,7 +37,8 @@ interface ProfilSuperAdminViewProps {
   pengaturan: PengaturanInstansi;
   kegiatanList: KegiatanJurnal[];
   onUpdateProfile: (updatedData: Partial<Pegawai>) => void;
-  onNavigateToTab?: (tab: 'monitoring' | 'jurnal' | 'rekapitulasi' | 'cetak') => void;
+  onNavigateToTab?: (tab: 'monitoring' | 'jurnal' | 'rekapitulasi' | 'cetak' | 'tambah-user') => void;
+  onAddPegawai?: (newPegawai: Pegawai) => Promise<void> | void;
 }
 
 export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
@@ -45,6 +48,7 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
   kegiatanList,
   onUpdateProfile,
   onNavigateToTab,
+  onAddPegawai,
 }) => {
   // Form state
   const [nama, setNama] = useState(currentPegawai.nama || '');
@@ -66,7 +70,7 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
 
   // Success message notification
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'profil' | 'keamanan' | 'akun' | 'wewenang'>('profil');
+  const [activeSubTab, setActiveSubTab] = useState<'profil' | 'keamanan' | 'akun' | 'tambah-user' | 'wewenang'>('profil');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Hidden file input for avatar upload
@@ -125,7 +129,7 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
       pangkatGolongan: pangkatGolongan.trim(),
       email: email.trim(),
       noHp: noHp.trim(),
-      foto: foto.trim() || undefined,
+      foto: foto.trim() || '',
     };
 
     onUpdateProfile(updatedData);
@@ -300,6 +304,19 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
             <span className="text-[10px] bg-rose-900/60 text-rose-200 px-1.5 py-0.5 rounded-full font-extrabold uppercase">
               Khusus Super Admin
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('tambah-user')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+              activeSubTab === 'tambah-user'
+                ? 'bg-rose-600 text-white shadow-md'
+                : 'bg-white/10 text-rose-200 hover:bg-white/15'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Tambah User Akun</span>
           </button>
 
           <button
@@ -629,14 +646,25 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
                 </p>
               </div>
 
-              <div className="w-full sm:w-64">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari nama akun atau NIP..."
-                  className="w-full text-xs px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-rose-500 font-medium"
-                />
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                <div className="w-full sm:w-64">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari nama akun atau NIP..."
+                    className="w-full text-xs px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-rose-500 font-medium"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab('tambah-user')}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center justify-center space-x-1.5 shrink-0 whitespace-nowrap cursor-pointer"
+                  title="Tambah User Akun Baru ke Firebase"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Tambah Akun</span>
+                </button>
               </div>
             </div>
 
@@ -809,6 +837,17 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* SUB-TAB: Tambah User Akun (Khusus Super Admin) */}
+      {activeSubTab === 'tambah-user' && onAddPegawai && (
+        <div className="space-y-6 animate-in fade-in">
+          <TambahUserView
+            allPegawai={allPegawai}
+            onAddPegawai={onAddPegawai}
+            onNavigateToAccounts={() => setActiveSubTab('akun')}
+          />
         </div>
       )}
 

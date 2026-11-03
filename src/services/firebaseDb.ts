@@ -54,11 +54,36 @@ export function subscribePegawaiFirestore(
   );
 }
 
+/**
+ * Recursively strips undefined values from objects so Firestore setDoc does not throw
+ * "Unsupported field value: undefined" errors.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = (typeof value === 'object' && value !== null) ? sanitizeForFirestore(value) : value;
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
+
 export async function savePegawaiToFirestore(pegawai: Pegawai): Promise<void> {
   const docPath = `${COLLECTIONS.PEGAWAI}/${pegawai.id}`;
   try {
     const ref = doc(db, COLLECTIONS.PEGAWAI, pegawai.id);
-    await setDoc(ref, pegawai, { merge: true });
+    await setDoc(ref, sanitizeForFirestore(pegawai), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
   }
@@ -78,7 +103,7 @@ export async function syncAllPegawaiToFirestore(list: Pegawai[]): Promise<void> 
     const batch = writeBatch(db);
     list.forEach((p) => {
       const ref = doc(db, COLLECTIONS.PEGAWAI, p.id);
-      batch.set(ref, p, { merge: true });
+      batch.set(ref, sanitizeForFirestore(p), { merge: true });
     });
     await batch.commit();
   } catch (error) {
@@ -124,7 +149,7 @@ export async function saveKegiatanToFirestore(kegiatan: KegiatanJurnal): Promise
   const docPath = `${COLLECTIONS.JURNAL}/${kegiatan.id}`;
   try {
     const ref = doc(db, COLLECTIONS.JURNAL, kegiatan.id);
-    await setDoc(ref, kegiatan, { merge: true });
+    await setDoc(ref, sanitizeForFirestore(kegiatan), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
   }
@@ -144,7 +169,7 @@ export async function syncAllKegiatanToFirestore(list: KegiatanJurnal[]): Promis
     const batch = writeBatch(db);
     list.forEach((k) => {
       const ref = doc(db, COLLECTIONS.JURNAL, k.id);
-      batch.set(ref, k, { merge: true });
+      batch.set(ref, sanitizeForFirestore(k), { merge: true });
     });
     await batch.commit();
   } catch (error) {
@@ -190,7 +215,7 @@ export async function savePresensiToFirestore(item: PresensiRecord): Promise<voi
   const docPath = `${COLLECTIONS.PRESENSI}/${item.id}`;
   try {
     const ref = doc(db, COLLECTIONS.PRESENSI, item.id);
-    await setDoc(ref, item, { merge: true });
+    await setDoc(ref, sanitizeForFirestore(item), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
   }
@@ -201,7 +226,7 @@ export async function syncAllPresensiToFirestore(list: PresensiRecord[]): Promis
     const batch = writeBatch(db);
     list.forEach((p) => {
       const ref = doc(db, COLLECTIONS.PRESENSI, p.id);
-      batch.set(ref, p, { merge: true });
+      batch.set(ref, sanitizeForFirestore(p), { merge: true });
     });
     await batch.commit();
   } catch (error) {
@@ -254,7 +279,7 @@ export async function savePengaturanToFirestore(accId: string, data: PengaturanI
   const docPath = `${COLLECTIONS.PENGATURAN}/${accId}`;
   try {
     const ref = doc(db, COLLECTIONS.PENGATURAN, accId);
-    await setDoc(ref, data, { merge: true });
+    await setDoc(ref, sanitizeForFirestore(data), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
   }
@@ -265,7 +290,7 @@ export async function syncAllPengaturanMapToFirestore(map: Record<string, Pengat
     const batch = writeBatch(db);
     Object.entries(map).forEach(([key, val]) => {
       const ref = doc(db, COLLECTIONS.PENGATURAN, key);
-      batch.set(ref, val, { merge: true });
+      batch.set(ref, sanitizeForFirestore(val), { merge: true });
     });
     await batch.commit();
   } catch (error) {

@@ -8,11 +8,12 @@ import {
   Settings,
   AlertCircle,
   ShieldCheck,
-  User
+  User,
+  UserPlus
 } from 'lucide-react';
 import { UserRole } from '../types';
 
-export type NavTab = 'jurnal' | 'verifikasi' | 'monitoring' | 'rekapitulasi' | 'cetak' | 'pengaturan' | 'profil';
+export type NavTab = 'jurnal' | 'verifikasi' | 'monitoring' | 'rekapitulasi' | 'cetak' | 'pengaturan' | 'profil' | 'tambah-user';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -51,6 +52,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           shortLabel: 'Jurnal',
           icon: BookOpen,
           badge: null,
+        },
+        {
+          id: 'tambah-user' as NavTab,
+          label: 'Tambah User Akun',
+          shortLabel: 'Tambah Akun',
+          icon: UserPlus,
+          badge: 'Super Admin',
+          highlight: true,
         },
         {
           id: 'rekapitulasi' as NavTab,
