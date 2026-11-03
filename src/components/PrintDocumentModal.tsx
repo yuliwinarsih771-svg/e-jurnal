@@ -27,6 +27,8 @@ import {
 import { PRESET_LOGO_PEMDA } from '../utils/presetLogos';
 import confetti from 'canvas-confetti';
 
+export type PeriodeMode = 'harian' | 'mingguan' | 'bulanan';
+
 interface PrintDocumentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,6 +39,8 @@ interface PrintDocumentModalProps {
   tahun: number;
   allPegawai?: Pegawai[];
   onSelectPegawaiId?: (id: string) => void;
+  initialPeriodeMode?: PeriodeMode;
+  initialTanggal?: string;
 }
 
 export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
@@ -49,20 +53,70 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
   tahun,
   allPegawai,
   onSelectPegawaiId,
+  initialPeriodeMode = 'bulanan',
+  initialTanggal,
 }) => {
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  // Period state: Harian | Mingguan | Bulanan
+  const [periodeMode, setPeriodeMode] = useState<PeriodeMode>(initialPeriodeMode);
+  const [selectedTanggalHarian, setSelectedTanggalHarian] = useState<string>(
+    initialTanggal || `${tahun}-${bulan.toString().padStart(2, '0')}-12`
+  );
+  const [selectedMingguKe, setSelectedMingguKe] = useState<number>(1);
+
   if (!isOpen) return null;
 
   const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
+
+  // Calculate rentangMingguanText
+  const rentangMingguanText = selectedMingguKe === 1 ? `01 s/d 07 ${bulanNama}`
+    : selectedMingguKe === 2 ? `08 s/d 14 ${bulanNama}`
+    : selectedMingguKe === 3 ? `15 s/d 21 ${bulanNama}`
+    : selectedMingguKe === 4 ? `22 s/d 28 ${bulanNama}`
+    : `29 s/d Akhir ${bulanNama}`;
+
+  // Title and Subtitle dynamically formatted for Harian, Mingguan, and Bulanan
+  const judulDokumen = periodeMode === 'harian'
+    ? 'JURNAL HARIAN KINERJA PEGAWAI'
+    : periodeMode === 'mingguan'
+      ? 'JURNAL MINGGUAN KINERJA PEGAWAI'
+      : (pengaturan.judulDokumen || 'JURNAL BULANAN KINERJA PEGAWAI');
+
+  const subJudulDokumen = periodeMode === 'harian'
+    ? `HARIAN - TANGGAL ${formatTanggalIndonesia(selectedTanggalHarian).toUpperCase()}`
+    : periodeMode === 'mingguan'
+      ? `MINGGU KE-${selectedMingguKe} (${rentangMingguanText.toUpperCase()}) BULAN ${bulanNama.toUpperCase()} ${tahun}`
+      : `BULAN ${bulanNama.toUpperCase()} ${tahun}`;
+
+  // Filter kegiatan by employee and selected period
   const filtered = kegiatanList
-    .filter(k => k.pegawaiId === pegawai.id)
-    .filter(k => {
-      const [y, m] = k.tanggal.split('-');
-      return parseInt(y, 10) === tahun && parseInt(m, 10) === bulan;
+    .filter((k) => k.pegawaiId === pegawai.id)
+    .filter((k) => {
+      const parts = k.tanggal.split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+
+      if (periodeMode === 'harian') {
+        return k.tanggal === selectedTanggalHarian;
+      }
+
+      if (periodeMode === 'mingguan') {
+        if (y !== tahun || m !== bulan) return false;
+        if (selectedMingguKe === 1) return d >= 1 && d <= 7;
+        if (selectedMingguKe === 2) return d >= 8 && d <= 14;
+        if (selectedMingguKe === 3) return d >= 15 && d <= 21;
+        if (selectedMingguKe === 4) return d >= 22 && d <= 28;
+        if (selectedMingguKe === 5) return d >= 29;
+        return true;
+      }
+
+      // Default: Bulanan
+      return y === tahun && m === bulan;
     })
     .sort((a, b) => {
       if (a.tanggal !== b.tanggal) return a.tanggal.localeCompare(b.tanggal);
@@ -73,7 +127,15 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
   const handlePrint = () => {
     try {
       setStatusMessage('Membuka dialog cetak printer/PDF...');
-      const fullHtml = generateFullPrintHtml(pegawai, pengaturan, filtered, bulan, tahun);
+      const fullHtml = generateFullPrintHtml(
+        pegawai,
+        pengaturan,
+        filtered,
+        bulan,
+        tahun,
+        subJudulDokumen,
+        judulDokumen
+      );
       printDocumentHtmlViaIframe(fullHtml);
       setTimeout(() => setStatusMessage(null), 3500);
     } catch (err) {
@@ -88,8 +150,12 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
       setIsGeneratingPdf(true);
       setStatusMessage('Sedang menyusun dan mengunduh berkas PDF A4...');
       const cleanName = pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
-      const fileName = `Jurnal_Harian_${cleanName}_${bulanNama}_${tahun}.pdf`;
-      
+      const fileName = periodeMode === 'harian'
+        ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.pdf`
+        : periodeMode === 'mingguan'
+          ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${tahun}.pdf`
+          : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${tahun}.pdf`;
+
       // Use clean iframe sandbox export which is completely free of Tailwind oklch styles
       await exportJurnalHtmlToPdf(
         pegawai,
@@ -98,9 +164,11 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
         bulan,
         tahun,
         fileName,
-        orientation
+        orientation,
+        subJudulDokumen,
+        judulDokumen
       );
-      
+
       confetti({ particleCount: 50, spread: 65, origin: { y: 0.6 } });
       setStatusMessage('Berkas PDF berhasil diunduh ke perangkat Anda!');
       setTimeout(() => setStatusMessage(null), 4000);
@@ -114,13 +182,45 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
   };
 
   const handleExcel = () => {
-    exportJurnalToExcel(pegawai, pengaturan, filtered, bulan, tahun);
+    const cleanName = pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = periodeMode === 'harian'
+      ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.xlsx`
+      : periodeMode === 'mingguan'
+        ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${tahun}.xlsx`
+        : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${tahun}.xlsx`;
+
+    exportJurnalToExcel(
+      pegawai,
+      pengaturan,
+      filtered,
+      bulan,
+      tahun,
+      subJudulDokumen,
+      judulDokumen,
+      fileName
+    );
     setStatusMessage('Format Excel (.xlsx) berhasil diunduh!');
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
   const handleWord = () => {
-    exportJurnalToWord(pegawai, pengaturan, filtered, bulan, tahun);
+    const cleanName = pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = periodeMode === 'harian'
+      ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.doc`
+      : periodeMode === 'mingguan'
+        ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${tahun}.doc`
+        : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${tahun}.doc`;
+
+    exportJurnalToWord(
+      pegawai,
+      pengaturan,
+      filtered,
+      bulan,
+      tahun,
+      subJudulDokumen,
+      judulDokumen,
+      fileName
+    );
     setStatusMessage('Format Word (.doc) berhasil diunduh!');
     setTimeout(() => setStatusMessage(null), 3000);
   };
@@ -299,6 +399,91 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
           </span>
         </div>
 
+        {/* Period Selector Sub-bar (Harian | Mingguan | Bulanan) */}
+        <div 
+          data-print-hide="true"
+          className="bg-white border-b border-slate-200 px-5 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 print:hidden shadow-xs"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">
+              Mode Cetak:
+            </span>
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setPeriodeMode('harian')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                  periodeMode === 'harian'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>📅 Cetak Harian</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPeriodeMode('mingguan')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                  periodeMode === 'mingguan'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>📆 Cetak Mingguan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPeriodeMode('bulanan')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                  periodeMode === 'bulanan'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>📊 Cetak Bulanan</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Period-specific filter controls */}
+          <div className="flex items-center gap-2">
+            {periodeMode === 'harian' && (
+              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5">
+                <label className="text-xs font-semibold text-slate-600">Pilih Tanggal:</label>
+                <input
+                  type="date"
+                  value={selectedTanggalHarian}
+                  onChange={(e) => setSelectedTanggalHarian(e.target.value)}
+                  className="text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                />
+              </div>
+            )}
+
+            {periodeMode === 'mingguan' && (
+              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5">
+                <label className="text-xs font-semibold text-slate-600">Pilih Minggu:</label>
+                <select
+                  value={selectedMingguKe}
+                  onChange={(e) => setSelectedMingguKe(Number(e.target.value))}
+                  className="text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                >
+                  <option value={1}>Minggu I (01 - 07 {bulanNama})</option>
+                  <option value={2}>Minggu II (08 - 14 {bulanNama})</option>
+                  <option value={3}>Minggu III (15 - 21 {bulanNama})</option>
+                  <option value={4}>Minggu IV (22 - 28 {bulanNama})</option>
+                  <option value={5}>Minggu V (29 - Akhir {bulanNama})</option>
+                </select>
+              </div>
+            )}
+
+            {periodeMode === 'bulanan' && (
+              <div className="flex items-center space-x-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5">
+                <span>Periode: {bulanNama.toUpperCase()} {tahun}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Paper Document Preview Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
           <div 
@@ -356,10 +541,10 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
             {/* Document Header */}
             <div className="text-center mb-6">
               <h1 className="text-base sm:text-lg font-bold tracking-wider uppercase">
-                {pengaturan.judulDokumen}
+                {judulDokumen}
               </h1>
               <p className="text-xs font-bold uppercase mt-0.5">
-                BULAN {bulanNama.toUpperCase()} {tahun}
+                {subJudulDokumen}
               </p>
             </div>
 

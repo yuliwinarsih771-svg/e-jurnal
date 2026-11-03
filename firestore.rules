@@ -1,18 +1,59 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 1. Pegawai & One-to-Many Subcollections
     match /pegawai/{pegawaiId} {
       allow read, write: if true;
+
+      // 1 Pegawai -> Many Jurnal Harian
+      match /jurnal_harian/{jurnalId} {
+        allow read, write: if true;
+
+        // 1 Jurnal -> Many Lampiran Bukti
+        match /lampiran/{lampiranId} {
+          allow read, write: if true;
+        }
+
+        // 1 Jurnal -> Many Sub-Aktivitas
+        match /sub_aktivitas/{subId} {
+          allow read, write: if true;
+        }
+      }
+
+      // 1 Pegawai -> Many Presensi Records
+      match /presensi/{presensiId} {
+        allow read, write: if true;
+      }
     }
+
+    // 2. Primary Collections (with foreign-key relations & subcollections)
     match /jurnal_harian/{jurnalId} {
       allow read, write: if true;
+
+      // 1 Jurnal -> Many Lampiran Bukti
+      match /lampiran/{lampiranId} {
+        allow read, write: if true;
+      }
+
+      // 1 Jurnal -> Many Sub-Aktivitas
+      match /sub_aktivitas/{subId} {
+        allow read, write: if true;
+      }
     }
+
     match /presensi/{presensiId} {
       allow read, write: if true;
     }
+
     match /pengaturan/{docId} {
       allow read, write: if true;
     }
+
+    // 1 Atasan -> Many Bawahan
+    match /atasan/{atasanId}/bawahan/{bawahanId} {
+      allow read, write: if true;
+    }
+
     match /test/{docId} {
       allow read, write: if true;
     }

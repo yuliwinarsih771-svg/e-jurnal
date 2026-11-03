@@ -22,15 +22,18 @@ export const exportJurnalToExcel = (
   pengaturan: PengaturanInstansi,
   kegiatanList: KegiatanJurnal[],
   bulan: number,
-  tahun: number
+  tahun: number,
+  subJudulOverride?: string,
+  judulOverride?: string,
+  fileNameOverride?: string
 ) => {
   const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
   const data: (string | number)[][] = [];
 
   // Header Dokumen
-  data.push([pengaturan.judulDokumen.toUpperCase()]);
+  data.push([(judulOverride || pengaturan.judulDokumen).toUpperCase()]);
   data.push([`${pegawai.jabatan.toUpperCase()}`]);
-  data.push([`BULAN ${bulanNama.toUpperCase()} ${tahun}`]);
+  data.push([subJudulOverride ? subJudulOverride.toUpperCase() : `BULAN ${bulanNama.toUpperCase()} ${tahun}`]);
   data.push([]);
 
   // Identitas Pegawai
@@ -107,7 +110,7 @@ export const exportJurnalToExcel = (
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, `Jurnal_${bulanNama}_${tahun}`);
 
-  const fileName = `Jurnal_Harian_${pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_')}_${bulanNama}_${tahun}.xlsx`;
+  const fileName = fileNameOverride || `Jurnal_${pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_')}_${bulanNama}_${tahun}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 };
 
@@ -116,7 +119,10 @@ export const exportJurnalToWord = (
   pengaturan: PengaturanInstansi,
   kegiatanList: KegiatanJurnal[],
   bulan: number,
-  tahun: number
+  tahun: number,
+  subJudulOverride?: string,
+  judulOverride?: string,
+  fileNameOverride?: string
 ) => {
   const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
   const tanggalHariIni = new Date();
@@ -186,8 +192,8 @@ export const exportJurnalToWord = (
     </head>
     <body>
       ${wordKopHtml}
-      <div class="header-title">${pengaturan.judulDokumen.toUpperCase()}</div>
-      <div class="sub-title">BULAN ${bulanNama.toUpperCase()} ${tahun}</div>
+      <div class="header-title">${(judulOverride || pengaturan.judulDokumen).toUpperCase()}</div>
+      <div class="sub-title">${subJudulOverride ? subJudulOverride.toUpperCase() : `BULAN ${bulanNama.toUpperCase()} ${tahun}`}</div>
 
       <table class="bio-table">
         <tr>
@@ -274,7 +280,7 @@ export const exportJurnalToWord = (
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Jurnal_Harian_${pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_')}_${bulanNama}_${tahun}.doc`;
+  a.download = fileNameOverride || `Jurnal_${pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_')}_${bulanNama}_${tahun}.doc`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -286,7 +292,9 @@ export const generateFullPrintHtml = (
   pengaturan: PengaturanInstansi,
   kegiatanList: KegiatanJurnal[],
   bulan: number,
-  tahun: number
+  tahun: number,
+  subJudulOverride?: string,
+  judulOverride?: string
 ): string => {
   const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
   const today = new Date();
@@ -294,7 +302,7 @@ export const generateFullPrintHtml = (
 
   let rows = '';
   if (kegiatanList.length === 0) {
-    rows = `<tr><td colspan="8" style="border: 1px solid #000; padding: 14px; text-align: center; font-style: italic;">Tidak ada kegiatan kerja tercatat pada periode bulan ini.</td></tr>`;
+    rows = `<tr><td colspan="8" style="border: 1px solid #000; padding: 14px; text-align: center; font-style: italic;">Tidak ada kegiatan kerja tercatat pada periode ini.</td></tr>`;
   } else {
     kegiatanList.forEach((keg, idx) => {
       const isApproved = keg.statusValidasi === 'Disetujui';
@@ -341,7 +349,7 @@ export const generateFullPrintHtml = (
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${pengaturan.judulDokumen} - ${pegawai.nama}</title>
+  <title>${judulOverride || pengaturan.judulDokumen} - ${pegawai.nama}</title>
   <style>
     @page { size: A4 landscape; margin: 8mm 10mm; }
     * { box-sizing: border-box; }
@@ -357,8 +365,8 @@ export const generateFullPrintHtml = (
 </head>
 <body>
   ${kopHtml}
-  <div class="doc-title">${pengaturan.judulDokumen}</div>
-  <div class="doc-sub">BULAN ${bulanNama.toUpperCase()} ${tahun}</div>
+  <div class="doc-title">${(judulOverride || pengaturan.judulDokumen).toUpperCase()}</div>
+  <div class="doc-sub">${subJudulOverride ? subJudulOverride.toUpperCase() : `BULAN ${bulanNama.toUpperCase()} ${tahun}`}</div>
 
   <table style="border: none; margin-bottom: 12px; font-weight: bold; font-size: 10pt;">
     <tr><td style="width: 130px;">NAMA</td><td style="width: 15px; text-align: center;">:</td><td style="text-transform: uppercase;">${pegawai.nama}</td></tr>
@@ -569,14 +577,16 @@ export const exportJurnalHtmlToPdf = async (
   bulan: number,
   tahun: number,
   fileName: string,
-  orientation: 'landscape' | 'portrait' = 'landscape'
+  orientation: 'landscape' | 'portrait' = 'landscape',
+  subJudulOverride?: string,
+  judulOverride?: string
 ) => {
   return withOklchSafeEnvironment(async () => {
     const html2pdfModule = await import('html2pdf.js');
     const html2pdf = html2pdfModule.default || html2pdfModule;
 
     // Generate pure, clean HTML without any Tailwind classes or oklch colors
-    const fullHtml = generateFullPrintHtml(pegawai, pengaturan, kegiatanList, bulan, tahun);
+    const fullHtml = generateFullPrintHtml(pegawai, pengaturan, kegiatanList, bulan, tahun, subJudulOverride, judulOverride);
 
     const tempContainer = document.createElement('div');
     tempContainer.id = 'pdf-render-temp-container';

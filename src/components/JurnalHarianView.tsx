@@ -43,7 +43,7 @@ interface JurnalHarianViewProps {
   onEditKegiatan: (kegiatan: KegiatanJurnal) => void;
   onDeleteKegiatan: (id: string) => void;
   onBatchDeleteKegiatan?: (ids: string[]) => void;
-  onOpenPrintModal: () => void;
+  onOpenPrintModal: (mode?: 'harian' | 'mingguan' | 'bulanan', tanggal?: string) => void;
   selectedBulan: number;
   setSelectedBulan: (bulan: number) => void;
   selectedTahun: number;
@@ -53,6 +53,7 @@ interface JurnalHarianViewProps {
   onNavigateToRekap?: () => void;
   onUpdatePegawai?: (pegawaiId: string, updatedData: Partial<Pegawai>) => void;
   onUpdatePengaturan?: (pegawaiId: string, updatedSettings: Partial<PengaturanInstansi>) => void;
+  initialPeriodeMode?: 'harian' | 'mingguan' | 'bulanan';
 }
 
 export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
@@ -74,11 +75,27 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
   onNavigateToRekap,
   onUpdatePegawai,
   onUpdatePengaturan,
+  initialPeriodeMode = 'bulanan',
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Disetujui' | 'Menunggu' | 'Ditolak'>('all');
   const [isEditProfilModalOpen, setIsEditProfilModalOpen] = useState(false);
   
+  // Period Mode: Harian | Mingguan | Bulanan
+  const [periodeMode, setPeriodeMode] = useState<'harian' | 'mingguan' | 'bulanan'>(initialPeriodeMode);
+  const [selectedTanggalHarian, setSelectedTanggalHarian] = useState<string>(() => {
+    const d = new Date();
+    return `${selectedTahun}-${selectedBulan.toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  });
+  const [selectedMingguKe, setSelectedMingguKe] = useState<number>(1);
+
+  // Sync mode whenever initialPeriodeMode prop changes (e.g., from top Navbar tabs)
+  React.useEffect(() => {
+    if (initialPeriodeMode) {
+      setPeriodeMode(initialPeriodeMode);
+    }
+  }, [initialPeriodeMode]);
+
   // Delete confirmation modal states
   const [kegiatanToDelete, setKegiatanToDelete] = useState<KegiatanJurnal | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -90,15 +107,54 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
     return allPegawai.find(p => p.id === selectedPegawaiId) || currentPegawai;
   }, [allPegawai, selectedPegawaiId, currentPegawai]);
 
-  // Filter activities for this employee, month, and year
+  const bulanNama = BULAN_INDONESIA[selectedBulan - 1] || 'Januari';
+
+  const rentangMingguanText = selectedMingguKe === 1 ? `01 s/d 07 ${bulanNama}`
+    : selectedMingguKe === 2 ? `08 s/d 14 ${bulanNama}`
+    : selectedMingguKe === 3 ? `15 s/d 21 ${bulanNama}`
+    : selectedMingguKe === 4 ? `22 s/d 28 ${bulanNama}`
+    : `29 s/d Akhir ${bulanNama}`;
+
+  const currentJudulDokumen = periodeMode === 'harian'
+    ? 'JURNAL HARIAN KINERJA PEGAWAI'
+    : periodeMode === 'mingguan'
+      ? 'JURNAL MINGGUAN KINERJA PEGAWAI'
+      : (pengaturan.judulDokumen || 'JURNAL BULANAN KINERJA PEGAWAI');
+
+  const currentSubJudulDokumen = periodeMode === 'harian'
+    ? `HARIAN - TANGGAL ${formatTanggalIndonesia(selectedTanggalHarian).toUpperCase()}`
+    : periodeMode === 'mingguan'
+      ? `MINGGU KE-${selectedMingguKe} (${rentangMingguanText.toUpperCase()}) BULAN ${bulanNama.toUpperCase()} ${selectedTahun}`
+      : `BULAN ${bulanNama.toUpperCase()} ${selectedTahun}`;
+
+  // Filter activities for this employee, selected period, month, and year
   const filteredKegiatan = useMemo(() => {
     return kegiatanList
       .filter((keg) => keg.pegawaiId === targetPegawai.id)
       .filter((keg) => {
         if (!keg.tanggal) return false;
-        const [y, m] = keg.tanggal.split('-');
-        if (parseInt(y, 10) !== selectedTahun) return false;
-        if (parseInt(m, 10) !== selectedBulan) return false;
+        const [yStr, mStr, dStr] = keg.tanggal.split('-');
+        const y = parseInt(yStr, 10);
+        const m = parseInt(mStr, 10);
+        const d = parseInt(dStr, 10);
+
+        if (periodeMode === 'harian') {
+          return keg.tanggal === selectedTanggalHarian;
+        }
+
+        if (periodeMode === 'mingguan') {
+          if (y !== selectedTahun || m !== selectedBulan) return false;
+          if (selectedMingguKe === 1) return d >= 1 && d <= 7;
+          if (selectedMingguKe === 2) return d >= 8 && d <= 14;
+          if (selectedMingguKe === 3) return d >= 15 && d <= 21;
+          if (selectedMingguKe === 4) return d >= 22 && d <= 28;
+          if (selectedMingguKe === 5) return d >= 29;
+          return true;
+        }
+
+        // Bulanan
+        if (y !== selectedTahun) return false;
+        if (m !== selectedBulan) return false;
         return true;
       })
       .filter((keg) => {
@@ -116,11 +172,10 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
         );
       })
       .sort((a, b) => {
-        // Sort by tanggal then waktuMulai
         if (a.tanggal !== b.tanggal) return a.tanggal.localeCompare(b.tanggal);
         return a.waktuMulai.localeCompare(b.waktuMulai);
       });
-  }, [kegiatanList, targetPegawai.id, selectedBulan, selectedTahun, statusFilter, searchTerm]);
+  }, [kegiatanList, targetPegawai.id, selectedBulan, selectedTahun, statusFilter, searchTerm, periodeMode, selectedTanggalHarian, selectedMingguKe]);
 
   // Monthly recapitulation stats for target employee
   const monthlyRecapStats = useMemo(() => {
@@ -160,11 +215,43 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
   }, [kegiatanList, targetPegawai.id, selectedBulan, selectedTahun]);
 
   const handleExportExcel = () => {
-    exportJurnalToExcel(targetPegawai, pengaturan, filteredKegiatan, selectedBulan, selectedTahun);
+    const cleanName = targetPegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = periodeMode === 'harian'
+      ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.xlsx`
+      : periodeMode === 'mingguan'
+        ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${selectedTahun}.xlsx`
+        : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${selectedTahun}.xlsx`;
+
+    exportJurnalToExcel(
+      targetPegawai,
+      pengaturan,
+      filteredKegiatan,
+      selectedBulan,
+      selectedTahun,
+      currentSubJudulDokumen,
+      currentJudulDokumen,
+      fileName
+    );
   };
 
   const handleExportWord = () => {
-    exportJurnalToWord(targetPegawai, pengaturan, filteredKegiatan, selectedBulan, selectedTahun);
+    const cleanName = targetPegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = periodeMode === 'harian'
+      ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.doc`
+      : periodeMode === 'mingguan'
+        ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${selectedTahun}.doc`
+        : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${selectedTahun}.doc`;
+
+    exportJurnalToWord(
+      targetPegawai,
+      pengaturan,
+      filteredKegiatan,
+      selectedBulan,
+      selectedTahun,
+      currentSubJudulDokumen,
+      currentJudulDokumen,
+      fileName
+    );
   };
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -173,8 +260,11 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
     try {
       setIsExportingPdf(true);
       const cleanName = targetPegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
-      const bulanNama = BULAN_INDONESIA[selectedBulan - 1] || 'Januari';
-      const fileName = `Jurnal_Harian_${cleanName}_${bulanNama}_${selectedTahun}.pdf`;
+      const fileName = periodeMode === 'harian'
+        ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.pdf`
+        : periodeMode === 'mingguan'
+          ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${selectedTahun}.pdf`
+          : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${selectedTahun}.pdf`;
 
       await exportJurnalHtmlToPdf(
         targetPegawai,
@@ -183,7 +273,9 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
         selectedBulan,
         selectedTahun,
         fileName,
-        'landscape'
+        'landscape',
+        currentSubJudulDokumen,
+        currentJudulDokumen
       );
 
       confetti({ particleCount: 50, spread: 65, origin: { y: 0.6 } });
@@ -192,7 +284,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
     } catch (err) {
       console.error('Gagal membuat PDF langsung:', err);
       // Fallback: open print modal where user can print or save as PDF
-      onOpenPrintModal();
+      onOpenPrintModal(periodeMode, selectedTanggalHarian);
     } finally {
       setIsExportingPdf(false);
     }
@@ -293,11 +385,64 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
         </div>
       )}
       
-      {/* Top Filter & Control Card */}
+      {/* Top Filter & Control Card with Period Mode Selector */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          
-          {/* Employee, Month & Year Selectors */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">
+              Pilihan Jurnal Kinerja
+            </span>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 mt-1 flex items-center gap-2">
+              <span>{currentJudulDokumen}</span>
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              {currentSubJudulDokumen}
+            </p>
+          </div>
+
+          {/* Period Mode Switcher Buttons */}
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setPeriodeMode('harian')}
+              className={`px-3 py-2 rounded-lg font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                periodeMode === 'harian'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Jurnal Harian</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodeMode('mingguan')}
+              className={`px-3 py-2 rounded-lg font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                periodeMode === 'mingguan'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Jurnal Mingguan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodeMode('bulanan')}
+              className={`px-3 py-2 rounded-lg font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                periodeMode === 'bulanan'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Jurnal Bulanan</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filters row: Employee + Period Selector + Status */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pt-4">
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Employee Selector (if Admin, Atasan, or Super Admin) */}
             {(currentPegawai.role === 'admin' || currentPegawai.role === 'atasan' || currentPegawai.role === 'superadmin') && (
@@ -315,6 +460,53 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
                       {peg.nama}
                     </option>
                   ))}
+                </select>
+              </div>
+            )}
+
+            {/* Harian Date Picker with quick today shortcut */}
+            {periodeMode === 'harian' && (
+              <div>
+                <label className="block text-[11px] font-bold text-blue-600 uppercase mb-1 flex items-center justify-between">
+                  <span>Pilih Tanggal</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date();
+                      setSelectedTanggalHarian(
+                        `${selectedTahun}-${selectedBulan.toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`
+                      );
+                    }}
+                    className="text-[10px] text-blue-700 hover:underline font-bold ml-2 cursor-pointer"
+                  >
+                    Hari Ini
+                  </button>
+                </label>
+                <input
+                  type="date"
+                  value={selectedTanggalHarian}
+                  onChange={(e) => setSelectedTanggalHarian(e.target.value)}
+                  className="text-xs font-bold text-slate-800 px-3 py-2 bg-blue-50/60 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                />
+              </div>
+            )}
+
+            {/* Mingguan Selector */}
+            {periodeMode === 'mingguan' && (
+              <div>
+                <label className="block text-[11px] font-bold text-blue-600 uppercase mb-1">
+                  Pilih Minggu
+                </label>
+                <select
+                  value={selectedMingguKe}
+                  onChange={(e) => setSelectedMingguKe(Number(e.target.value))}
+                  className="text-xs font-bold text-slate-800 px-3 py-2 bg-blue-50/60 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                >
+                  <option value={1}>Minggu I (01 - 07 {bulanNama})</option>
+                  <option value={2}>Minggu II (08 - 14 {bulanNama})</option>
+                  <option value={3}>Minggu III (15 - 21 {bulanNama})</option>
+                  <option value={4}>Minggu IV (22 - 28 {bulanNama})</option>
+                  <option value={5}>Minggu V (29 - Akhir {bulanNama})</option>
                 </select>
               </div>
             )}
@@ -386,7 +578,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
             <button
               onClick={handleExportExcel}
               className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="Unduh Format Excel (.xlsx)"
+              title={`Unduh ${periodeMode === 'harian' ? 'Harian' : periodeMode === 'mingguan' ? 'Mingguan' : 'Bulanan'} Format Excel (.xlsx)`}
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span className="hidden sm:inline">Excel</span>
@@ -395,7 +587,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
             <button
               onClick={handleExportWord}
               className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="Unduh Format Word (.doc)"
+              title={`Unduh ${periodeMode === 'harian' ? 'Harian' : periodeMode === 'mingguan' ? 'Mingguan' : 'Bulanan'} Format Word (.doc)`}
             >
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">Word</span>
@@ -408,7 +600,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
               className={`px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer ${
                 isExportingPdf ? 'opacity-80 cursor-wait' : ''
               }`}
-              title="Unduh Langsung File PDF (.pdf) dengan Format Resmi, Kop & Logo Instansi"
+              title={`Unduh Langsung File PDF (.pdf) untuk Jurnal ${periodeMode === 'harian' ? 'Harian' : periodeMode === 'mingguan' ? 'Mingguan' : 'Bulanan'}`}
             >
               {isExportingPdf ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -419,15 +611,20 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
             </button>
 
             <button
-              onClick={onOpenPrintModal}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="Buka Pratinjau Dokumen Cetak / Pengaturan Kertas A4"
+              onClick={() => onOpenPrintModal(periodeMode, selectedTanggalHarian)}
+              className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-xs cursor-pointer ring-1 ring-slate-700"
+              title={`Buka Pratinjau Dokumen Cetak Jurnal ${periodeMode === 'harian' ? 'Harian' : periodeMode === 'mingguan' ? 'Mingguan' : 'Bulanan'}`}
             >
-              <Printer className="w-4 h-4" />
-              <span>Cetak / Pratinjau</span>
+              <Printer className="w-4 h-4 text-amber-400" />
+              <span>
+                {periodeMode === 'harian'
+                  ? 'Cetak Jurnal Harian'
+                  : periodeMode === 'mingguan'
+                    ? 'Cetak Jurnal Mingguan'
+                    : 'Cetak Jurnal Bulanan'}
+              </span>
             </button>
           </div>
-
         </div>
 
         {/* Search Input Bar */}
@@ -711,9 +908,41 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
                       <td className="py-3 px-4 text-slate-800 leading-relaxed">
                         <div className="flex items-start space-x-1.5">
                           <span className="text-blue-600 font-black text-xs select-none">►</span>
-                          <div>
+                          <div className="space-y-1.5 w-full">
                             <span className="font-semibold text-slate-900">{keg.kegiatan}</span>
-                            {keg.tautanBukti && (
+
+                            {/* Sub-Aktivitas List (One-to-Many) */}
+                            {Array.isArray(keg.subAktivitasList) && keg.subAktivitasList.length > 0 && (
+                              <div className="mt-1 pl-2 border-l-2 border-slate-200 space-y-0.5">
+                                {keg.subAktivitasList.map((sub, sIdx) => (
+                                  <div key={sub.id || sIdx} className="text-[11px] flex items-center space-x-1.5 text-slate-600">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${sub.status === 'Selesai' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                    <span className={sub.status === 'Selesai' ? 'text-slate-700' : 'text-slate-500'}>{sub.uraian}</span>
+                                    {sub.status === 'Selesai' && <span className="text-[9px] text-emerald-600 font-bold">(✓)</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Lampiran List (One-to-Many) */}
+                            {Array.isArray(keg.lampiranList) && keg.lampiranList.length > 0 ? (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                {keg.lampiranList.map((lamp, lIdx) => (
+                                  <a
+                                    key={lamp.id || lIdx}
+                                    href={lamp.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center space-x-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition"
+                                    title={lamp.url}
+                                  >
+                                    <span>📎</span>
+                                    <span className="truncate max-w-[120px]">{lamp.judul}</span>
+                                    <span>↗</span>
+                                  </a>
+                                ))}
+                              </div>
+                            ) : keg.tautanBukti ? (
                               <div className="mt-1">
                                 <a 
                                   href={keg.tautanBukti} 
@@ -724,7 +953,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
                                   Evidence / Bukti Dukung ↗
                                 </a>
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </td>

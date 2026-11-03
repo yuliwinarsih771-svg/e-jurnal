@@ -85,6 +85,33 @@
         "toleransiKeterlambatanMenit": { "type": "number" }
       },
       "required": ["namaInstansi", "badanDinas", "alamat", "kotaPenetapan", "judulDokumen", "namaAtasan", "nipAtasan"]
+    },
+    "LampiranBukti": {
+      "title": "LampiranBukti",
+      "description": "Dokumen/foto/tautan bukti kinerja pendukung kegiatan (One-to-Many dengan KegiatanJurnal)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "kegiatanId": { "type": "string" },
+        "judul": { "type": "string" },
+        "url": { "type": "string" },
+        "tipe": { "type": "string", "enum": ["link", "gambar", "dokumen"] },
+        "waktuDibuat": { "type": "string" }
+      },
+      "required": ["id", "kegiatanId", "judul", "url"]
+    },
+    "SubAktivitas": {
+      "title": "SubAktivitas",
+      "description": "Rincian tugas atau sub-output dari kegiatan harian (One-to-Many dengan KegiatanJurnal)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "kegiatanId": { "type": "string" },
+        "uraian": { "type": "string" },
+        "status": { "type": "string", "enum": ["Selesai", "Dalam Proses", "Pending"] },
+        "targetOutput": { "type": "string" }
+      },
+      "required": ["id", "kegiatanId", "uraian", "status"]
     }
   },
   "firestore": {
@@ -92,9 +119,33 @@
       "schema": "Pegawai",
       "description": "Daftar pegawai dan akun pengguna"
     },
+    "/pegawai/{pegawaiId}/jurnal_harian/{jurnalId}": {
+      "schema": "KegiatanJurnal",
+      "description": "One-to-Many subcollection: Log kegiatan harian spesifik per pegawai"
+    },
+    "/pegawai/{pegawaiId}/presensi/{presensiId}": {
+      "schema": "PresensiRecord",
+      "description": "One-to-Many subcollection: Rekam jejak kehadiran harian per pegawai"
+    },
+    "/pegawai/{pegawaiId}/jurnal_harian/{jurnalId}/lampiran/{lampiranId}": {
+      "schema": "LampiranBukti",
+      "description": "One-to-Many subcollection: Lampiran/bukti kegiatan per kegiatan jurnal pegawai"
+    },
+    "/pegawai/{pegawaiId}/jurnal_harian/{jurnalId}/sub_aktivitas/{subId}": {
+      "schema": "SubAktivitas",
+      "description": "One-to-Many subcollection: Rincian sub-aktivitas per kegiatan jurnal pegawai"
+    },
     "/jurnal_harian/{jurnalId}": {
       "schema": "KegiatanJurnal",
-      "description": "Catatan log kegiatan harian pegawai"
+      "description": "Catatan log kegiatan harian pegawai (koleksi utama dengan relasi pegawaiId)"
+    },
+    "/jurnal_harian/{jurnalId}/lampiran/{lampiranId}": {
+      "schema": "LampiranBukti",
+      "description": "One-to-Many subcollection: Daftar lampiran bukti per kegiatan jurnal"
+    },
+    "/jurnal_harian/{jurnalId}/sub_aktivitas/{subId}": {
+      "schema": "SubAktivitas",
+      "description": "One-to-Many subcollection: Rincian sub-tugas per kegiatan jurnal"
     },
     "/presensi/{presensiId}": {
       "schema": "PresensiRecord",
@@ -103,6 +154,10 @@
     "/pengaturan/{docId}": {
       "schema": "PengaturanInstansi",
       "description": "Pengaturan instansi dan profil cetak per akun atau templat baku"
+    },
+    "/atasan/{atasanId}/bawahan/{bawahanId}": {
+      "schema": "Pegawai",
+      "description": "One-to-Many relasi: Daftar bawahan langsung yang dinilai oleh atasan"
     }
   }
 }

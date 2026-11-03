@@ -81,6 +81,8 @@ export default function App() {
   const [isJurnalModalOpen, setIsJurnalModalOpen] = useState<boolean>(false);
   const [editingKegiatan, setEditingKegiatan] = useState<KegiatanJurnal | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [printModalMode, setPrintModalMode] = useState<'harian' | 'mingguan' | 'bulanan'>('bulanan');
+  const [printModalTanggal, setPrintModalTanggal] = useState<string>('');
   const [isLaravelDocsOpen, setIsLaravelDocsOpen] = useState<boolean>(false);
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
 
@@ -220,12 +222,13 @@ export default function App() {
   };
 
   // Guard:
-  // - Super Admin: Mempunyai hak akses ke semua jurnal (monitoring, jurnal, rekapitulasi, cetak, pengaturan)
-  // - Atasan: Terbatas khusus 'verifikasi' dan 'monitoring'
+  // - Super Admin: Mempunyai hak akses ke semua jurnal (monitoring, jurnal harian/mingguan/bulanan, rekapitulasi, cetak, profil, tambah user)
+  // - Atasan: Mempunyai akses verifikasi, monitoring, serta jurnal harian/mingguan/bulanan dan cetak
   // - Non-Atasan & Non-SuperAdmin: Tidak dapat membuka 'verifikasi' dan 'monitoring'
   useEffect(() => {
     if (currentPegawai.role === 'atasan') {
-      if (activeTab !== 'verifikasi' && activeTab !== 'monitoring') {
+      const allowedForAtasan = ['verifikasi', 'monitoring', 'jurnal', 'jurnal-harian', 'jurnal-mingguan', 'jurnal-bulanan', 'cetak'];
+      if (!allowedForAtasan.includes(activeTab)) {
         setActiveTab('verifikasi');
       }
     } else if (currentPegawai.role === 'superadmin') {
@@ -234,7 +237,7 @@ export default function App() {
       }
     } else {
       if (activeTab === 'verifikasi' || activeTab === 'monitoring') {
-        setActiveTab('jurnal');
+        setActiveTab('jurnal-harian');
       }
     }
   }, [currentPegawai.role, activeTab]);
@@ -587,13 +590,15 @@ export default function App() {
             return;
           }
           if (currentPegawai.role === 'atasan') {
-            if (tab === 'verifikasi' || tab === 'monitoring') {
+            if (tab === 'cetak') {
+              setIsPrintModalOpen(true);
+            } else {
               setActiveTab(tab);
             }
             return;
           }
           if (tab === 'verifikasi' || tab === 'monitoring') {
-            setActiveTab('jurnal');
+            setActiveTab('jurnal-harian');
             return;
           }
           if (tab === 'cetak') {
@@ -608,12 +613,19 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {activeTab === 'jurnal' && (
+        {(activeTab === 'jurnal' || activeTab === 'jurnal-harian' || activeTab === 'jurnal-mingguan' || activeTab === 'jurnal-bulanan') && (
           <JurnalHarianView
             currentPegawai={currentPegawai}
             allPegawai={pegawaiList}
             pengaturan={targetPengaturan}
             kegiatanList={kegiatanList}
+            initialPeriodeMode={
+              activeTab === 'jurnal-mingguan'
+                ? 'mingguan'
+                : activeTab === 'jurnal-bulanan'
+                  ? 'bulanan'
+                  : 'harian'
+            }
             onAddKegiatan={() => {
               setEditingKegiatan(null);
               setIsJurnalModalOpen(true);
@@ -621,7 +633,11 @@ export default function App() {
             onEditKegiatan={handleEditKegiatan}
             onDeleteKegiatan={handleDeleteKegiatan}
             onBatchDeleteKegiatan={handleBatchDeleteKegiatan}
-            onOpenPrintModal={() => setIsPrintModalOpen(true)}
+            onOpenPrintModal={(mode, tgl) => {
+              if (mode) setPrintModalMode(mode);
+              if (tgl) setPrintModalTanggal(tgl);
+              setIsPrintModalOpen(true);
+            }}
             selectedBulan={selectedBulan}
             setSelectedBulan={setSelectedBulan}
             selectedTahun={selectedTahun}
@@ -819,6 +835,8 @@ export default function App() {
         tahun={selectedTahun}
         allPegawai={pegawaiList}
         onSelectPegawaiId={setSelectedPegawaiId}
+        initialPeriodeMode={printModalMode}
+        initialTanggal={printModalTanggal}
       />
 
       <LaravelApiGuideModal

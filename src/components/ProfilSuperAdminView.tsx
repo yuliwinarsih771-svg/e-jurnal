@@ -836,6 +836,47 @@ export const ProfilSuperAdminView: React.FC<ProfilSuperAdminViewProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Arsitektur Database Relasional One-to-Many */}
+            <div className="mt-5 p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white border border-slate-700 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center space-x-2">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-white tracking-wide">
+                    Struktur Database Firebase Firestore: Relasi One-to-Many (1:N) Aktif
+                  </span>
+                </div>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  Subkoleksi Hierarkis & Koleksi Utama
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="p-3 bg-white/5 rounded-xl border border-white/10 space-y-1">
+                  <div className="text-[10px] uppercase font-bold text-emerald-400">1 Pegawai &rarr; N Jurnal</div>
+                  <div className="text-white font-semibold">Log Kegiatan Harian</div>
+                  <p className="text-[11px] text-slate-300">
+                    Setiap 1 akun pegawai memiliki relasi subkoleksi banyak log kegiatan jurnal harian.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-white/5 rounded-xl border border-white/10 space-y-1">
+                  <div className="text-[10px] uppercase font-bold text-cyan-400">1 Kegiatan &rarr; N Lampiran</div>
+                  <div className="text-white font-semibold">Bukti Dukung & Sub-Tugas</div>
+                  <p className="text-[11px] text-slate-300">
+                    1 kegiatan jurnal dapat menyimpan banyak lampiran bukti foto/dokumen dan tahapan kerja.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-white/5 rounded-xl border border-white/10 space-y-1">
+                  <div className="text-[10px] uppercase font-bold text-indigo-400">1 Atasan &rarr; N Bawahan</div>
+                  <div className="text-white font-semibold">Hierarki Penilaian Dinas</div>
+                  <p className="text-[11px] text-slate-300">
+                    1 atasan pejabat penilai membawahi banyak staf pegawai untuk verifikasi resmi.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

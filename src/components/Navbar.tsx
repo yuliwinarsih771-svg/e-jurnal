@@ -9,11 +9,25 @@ import {
   AlertCircle,
   ShieldCheck,
   User,
-  UserPlus
+  UserPlus,
+  Calendar,
+  CalendarDays,
+  CalendarRange
 } from 'lucide-react';
 import { UserRole } from '../types';
 
-export type NavTab = 'jurnal' | 'verifikasi' | 'monitoring' | 'rekapitulasi' | 'cetak' | 'pengaturan' | 'profil' | 'tambah-user';
+export type NavTab = 
+  | 'jurnal' 
+  | 'jurnal-harian' 
+  | 'jurnal-mingguan' 
+  | 'jurnal-bulanan' 
+  | 'verifikasi' 
+  | 'monitoring' 
+  | 'rekapitulasi' 
+  | 'cetak' 
+  | 'pengaturan' 
+  | 'profil' 
+  | 'tambah-user';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -47,10 +61,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           badge: null,
         },
         {
-          id: 'jurnal' as NavTab,
-          label: 'Semua Jurnal Harian',
-          shortLabel: 'Jurnal',
-          icon: BookOpen,
+          id: 'jurnal-harian' as NavTab,
+          label: 'Jurnal Harian',
+          shortLabel: 'Harian',
+          icon: Calendar,
+          badge: null,
+        },
+        {
+          id: 'jurnal-mingguan' as NavTab,
+          label: 'Jurnal Mingguan',
+          shortLabel: 'Mingguan',
+          icon: CalendarRange,
+          badge: null,
+        },
+        {
+          id: 'jurnal-bulanan' as NavTab,
+          label: 'Jurnal Bulanan',
+          shortLabel: 'Bulanan',
+          icon: CalendarDays,
           badge: null,
         },
         {
@@ -101,13 +129,55 @@ export const Navbar: React.FC<NavbarProps> = ({
             badge: null,
             highlight: false,
           },
+          {
+            id: 'jurnal-harian' as NavTab,
+            label: 'Jurnal Harian',
+            shortLabel: 'Harian',
+            icon: Calendar,
+            badge: null,
+          },
+          {
+            id: 'jurnal-mingguan' as NavTab,
+            label: 'Jurnal Mingguan',
+            shortLabel: 'Mingguan',
+            icon: CalendarRange,
+            badge: null,
+          },
+          {
+            id: 'jurnal-bulanan' as NavTab,
+            label: 'Jurnal Bulanan',
+            shortLabel: 'Bulanan',
+            icon: CalendarDays,
+            badge: null,
+          },
+          {
+            id: 'cetak' as NavTab,
+            label: 'Cetak & Ekspor',
+            shortLabel: 'Cetak',
+            icon: Printer,
+            badge: null,
+          },
         ]
       : [
           {
-            id: 'jurnal' as NavTab,
+            id: 'jurnal-harian' as NavTab,
             label: 'Jurnal Harian',
-            shortLabel: 'Jurnal',
-            icon: BookOpen,
+            shortLabel: 'Harian',
+            icon: Calendar,
+            badge: null,
+          },
+          {
+            id: 'jurnal-mingguan' as NavTab,
+            label: 'Jurnal Mingguan',
+            shortLabel: 'Mingguan',
+            icon: CalendarRange,
+            badge: null,
+          },
+          {
+            id: 'jurnal-bulanan' as NavTab,
+            label: 'Jurnal Bulanan',
+            shortLabel: 'Bulanan',
+            icon: CalendarDays,
             badge: null,
           },
           {
@@ -141,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 sm:py-2.5 no-scrollbar">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = activeTab === item.id || (activeTab === 'jurnal' && item.id === 'jurnal-harian');
             return (
               <button
                 key={item.id}
