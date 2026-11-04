@@ -149,53 +149,17 @@ export async function saveKegiatanToFirestore(kegiatan: KegiatanJurnal): Promise
   const docPath = `${COLLECTIONS.JURNAL}/${kegiatan.id}`;
   try {
     const cleanData = sanitizeForFirestore(kegiatan);
-    // 1. Root collection /jurnal_harian/{jurnalId}
     const ref = doc(db, COLLECTIONS.JURNAL, kegiatan.id);
     await setDoc(ref, cleanData, { merge: true });
-
-    // 2. One-to-Many nested subcollection: /pegawai/{pegawaiId}/jurnal_harian/{jurnalId}
-    if (kegiatan.pegawaiId) {
-      const subRef = doc(db, COLLECTIONS.PEGAWAI, kegiatan.pegawaiId, COLLECTIONS.JURNAL, kegiatan.id);
-      await setDoc(subRef, cleanData, { merge: true });
-    }
-
-    // 3. One-to-Many: 1 Kegiatan has Many Lampiran Bukti
-    if (Array.isArray(kegiatan.lampiranList) && kegiatan.lampiranList.length > 0) {
-      for (const lampiran of kegiatan.lampiranList) {
-        const cleanLampiran = sanitizeForFirestore(lampiran);
-        const lampiranRef = doc(db, COLLECTIONS.JURNAL, kegiatan.id, 'lampiran', lampiran.id);
-        await setDoc(lampiranRef, cleanLampiran, { merge: true });
-        if (kegiatan.pegawaiId) {
-          const subLampiranRef = doc(db, COLLECTIONS.PEGAWAI, kegiatan.pegawaiId, COLLECTIONS.JURNAL, kegiatan.id, 'lampiran', lampiran.id);
-          await setDoc(subLampiranRef, cleanLampiran, { merge: true });
-        }
-      }
-    }
-
-    // 4. One-to-Many: 1 Kegiatan has Many Sub-Aktivitas
-    if (Array.isArray(kegiatan.subAktivitasList) && kegiatan.subAktivitasList.length > 0) {
-      for (const sub of kegiatan.subAktivitasList) {
-        const cleanSub = sanitizeForFirestore(sub);
-        const subAktivitasRef = doc(db, COLLECTIONS.JURNAL, kegiatan.id, 'sub_aktivitas', sub.id);
-        await setDoc(subAktivitasRef, cleanSub, { merge: true });
-        if (kegiatan.pegawaiId) {
-          const nestedSubRef = doc(db, COLLECTIONS.PEGAWAI, kegiatan.pegawaiId, COLLECTIONS.JURNAL, kegiatan.id, 'sub_aktivitas', sub.id);
-          await setDoc(nestedSubRef, cleanSub, { merge: true });
-        }
-      }
-    }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
   }
 }
 
-export async function deleteKegiatanFromFirestore(id: string, pegawaiId?: string): Promise<void> {
+export async function deleteKegiatanFromFirestore(id: string): Promise<void> {
   const docPath = `${COLLECTIONS.JURNAL}/${id}`;
   try {
     await deleteDoc(doc(db, COLLECTIONS.JURNAL, id));
-    if (pegawaiId) {
-      await deleteDoc(doc(db, COLLECTIONS.PEGAWAI, pegawaiId, COLLECTIONS.JURNAL, id));
-    }
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, docPath);
   }
@@ -208,10 +172,6 @@ export async function syncAllKegiatanToFirestore(list: KegiatanJurnal[]): Promis
       const clean = sanitizeForFirestore(k);
       const ref = doc(db, COLLECTIONS.JURNAL, k.id);
       batch.set(ref, clean, { merge: true });
-      if (k.pegawaiId) {
-        const subRef = doc(db, COLLECTIONS.PEGAWAI, k.pegawaiId, COLLECTIONS.JURNAL, k.id);
-        batch.set(subRef, clean, { merge: true });
-      }
     });
     await batch.commit();
   } catch (error) {

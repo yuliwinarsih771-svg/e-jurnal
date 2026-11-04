@@ -18,24 +18,6 @@ export interface Pegawai {
   foto?: string;
   atasanId?: string;
   noHp?: string;
-  daftarBawahanIds?: string[];
-}
-
-export interface LampiranBukti {
-  id: string;
-  kegiatanId: string;
-  judul: string;
-  url: string;
-  tipe?: 'link' | 'gambar' | 'dokumen';
-  waktuDibuat?: string;
-}
-
-export interface SubAktivitas {
-  id: string;
-  kegiatanId: string;
-  uraian: string;
-  status: 'Selesai' | 'Dalam Proses' | 'Pending';
-  targetOutput?: string;
 }
 
 export interface KegiatanJurnal {
@@ -54,9 +36,6 @@ export interface KegiatanJurnal {
   namaValidator?: string;
   nipValidator?: string;
   tautanBukti?: string;
-  // One-to-Many relations
-  lampiranList?: LampiranBukti[];
-  subAktivitasList?: SubAktivitas[];
 }
 
 export interface PresensiRecord {

@@ -565,15 +565,17 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons: Add, Excel, Word, PDF Langsung, Cetak / Pratinjau */}
+          {/* Action Buttons: Add (Harian only), Excel, Word, PDF Langsung, Cetak / Pratinjau */}
           <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0">
-            <button
-              onClick={onAddKegiatan}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Kegiatan</span>
-            </button>
+            {periodeMode === 'harian' && (
+              <button
+                onClick={onAddKegiatan}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Kegiatan Harian</span>
+              </button>
+            )}
 
             <button
               onClick={handleExportExcel}
@@ -646,6 +648,40 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
         </div>
 
       </div>
+
+      {/* Rollup Explanation Banner for Weekly and Monthly Views */}
+      {periodeMode !== 'harian' && (
+        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border border-blue-200/90 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs animate-in fade-in">
+          <div className="flex items-start space-x-3.5">
+            <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                  {periodeMode === 'mingguan' ? 'Rekapitulasi Jurnal Mingguan' : 'Rekapitulasi Jurnal Bulanan'}
+                </h3>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 tracking-wider">
+                  Hasil Otomatis dari Jurnal Harian
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed max-w-2xl">
+                {periodeMode === 'mingguan'
+                  ? `Daftar kegiatan di bawah ini diringkas secara otomatis dari seluruh entri yang Anda input pada Jurnal Harian selama Minggu Ke-${selectedMingguKe} (${rentangMingguanText}). Pengisian kegiatan baru hanya dapat dilakukan melalui menu Jurnal Harian.`
+                  : `Daftar kegiatan di bawah ini diringkas secara otomatis dari seluruh entri yang Anda input pada Jurnal Harian selama Bulan ${bulanNama} ${selectedTahun}. Pengisian kegiatan baru hanya dapat dilakukan melalui menu Jurnal Harian.`}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPeriodeMode('harian')}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-1.5 shrink-0 cursor-pointer self-start md:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Isi di Jurnal Harian</span>
+          </button>
+        </div>
+      )}
 
       {/* Monthly Recapitulation Quick Overview Card per User */}
       <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-4 sm:p-5 text-white shadow-xs">
@@ -911,38 +947,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
                           <div className="space-y-1.5 w-full">
                             <span className="font-semibold text-slate-900">{keg.kegiatan}</span>
 
-                            {/* Sub-Aktivitas List (One-to-Many) */}
-                            {Array.isArray(keg.subAktivitasList) && keg.subAktivitasList.length > 0 && (
-                              <div className="mt-1 pl-2 border-l-2 border-slate-200 space-y-0.5">
-                                {keg.subAktivitasList.map((sub, sIdx) => (
-                                  <div key={sub.id || sIdx} className="text-[11px] flex items-center space-x-1.5 text-slate-600">
-                                    <span className={`w-1.5 h-1.5 rounded-full ${sub.status === 'Selesai' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                                    <span className={sub.status === 'Selesai' ? 'text-slate-700' : 'text-slate-500'}>{sub.uraian}</span>
-                                    {sub.status === 'Selesai' && <span className="text-[9px] text-emerald-600 font-bold">(✓)</span>}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Lampiran List (One-to-Many) */}
-                            {Array.isArray(keg.lampiranList) && keg.lampiranList.length > 0 ? (
-                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                {keg.lampiranList.map((lamp, lIdx) => (
-                                  <a
-                                    key={lamp.id || lIdx}
-                                    href={lamp.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center space-x-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition"
-                                    title={lamp.url}
-                                  >
-                                    <span>📎</span>
-                                    <span className="truncate max-w-[120px]">{lamp.judul}</span>
-                                    <span>↗</span>
-                                  </a>
-                                ))}
-                              </div>
-                            ) : keg.tautanBukti ? (
+                            {keg.tautanBukti && (
                               <div className="mt-1">
                                 <a 
                                   href={keg.tautanBukti} 
@@ -953,7 +958,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
                                   Evidence / Bukti Dukung ↗
                                 </a>
                               </div>
-                            ) : null}
+                            )}
                           </div>
                         </div>
                       </td>
