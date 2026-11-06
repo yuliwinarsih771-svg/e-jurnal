@@ -333,12 +333,21 @@ export default function App() {
     setPengaturanMap((prev) => {
       const current = prev[pegId] || prev['default'] || INITIAL_PENGATURAN;
       const merged = { ...current, ...updatedSettings };
+      const mergedDefault = { ...(prev['default'] || INITIAL_PENGATURAN), ...updatedSettings };
       const updatedMap = {
         ...prev,
         [pegId]: merged,
-        ['default']: { ...(prev['default'] || INITIAL_PENGATURAN), ...updatedSettings },
+        ['default']: mergedDefault,
       };
       saveAllPengaturanMap(updatedMap);
+      savePengaturanToFirestore(pegId, merged).catch((err) => {
+        console.warn('Firestore settings sync notice:', err);
+      });
+      if (pegId !== 'default') {
+        savePengaturanToFirestore('default', mergedDefault).catch((err) => {
+          console.warn('Firestore default settings sync notice:', err);
+        });
+      }
       return updatedMap;
     });
   };

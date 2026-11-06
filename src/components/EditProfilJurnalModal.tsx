@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -60,23 +60,94 @@ export const EditProfilJurnalModal: React.FC<EditProfilJurnalModalProps> = ({
   // Active section tab
   const [activeTab, setActiveTab] = useState<'logo' | 'pegawai' | 'instansi' | 'atasan'>('logo');
 
+  // Sync form state whenever modal opens or pegawai/pengaturan updates from Firestore
+  useEffect(() => {
+    if (isOpen) {
+      setLogoUrl(pengaturan.logoUrl || PRESET_LOGO_PEMDA);
+      setNama(pegawai.nama || '');
+      setNip(pegawai.nip || '');
+      setJabatan(pegawai.jabatan || '');
+      setUnitKerja(pegawai.unitKerja || '');
+      setPangkatGolongan(pegawai.pangkatGolongan || '');
+      setJudulDokumen(pengaturan.judulDokumen || 'JURNAL HARIAN');
+      setNamaInstansi(pengaturan.namaInstansi || 'PEMERINTAH KABUPATEN BELU');
+      setBadanDinas(pengaturan.badanDinas || 'BADAN KEPEGAWAIAN DAN PENGEMBANGAN SDM DAERAH');
+      setBidangBagian(pengaturan.bidangBagian || '');
+      setAlamat(pengaturan.alamat || '');
+      setKotaPenetapan(pengaturan.kotaPenetapan || 'Atambua');
+      setNamaAtasan(pengaturan.namaAtasan || '');
+      setNipAtasan(pengaturan.nipAtasan || '');
+      setJabatanAtasan(pengaturan.jabatanAtasan || '');
+    }
+  }, [isOpen, pegawai, pengaturan]);
+
   if (!isOpen) return null;
 
-  // Handle local logo file upload
+  // Handle local logo file upload with automatic compression so it persists cleanly in Firestore
   const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('Ukuran file logo maksimal 2MB.');
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran file logo maksimal 5MB.');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      // SVG files can be stored directly if under 500KB
+      if (file.type === 'image/svg+xml' && rawDataUrl.length < 500000) {
+        setLogoUrl(rawDataUrl);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        setLogoUrl(result);
+
+      // Compress/resize raster images (PNG, JPG, WebP) to max 512x512px so Firestore 1MB limit is never exceeded
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 512;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          setLogoUrl(rawDataUrl);
+          return;
+        }
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Preserve transparency with PNG; fallback to JPEG if still > 600KB
+        let compressed = canvas.toDataURL('image/png');
+        if (compressed.length > 600000) {
+          compressed = canvas.toDataURL('image/jpeg', 0.88);
+        }
+        setLogoUrl(compressed);
       };
-      reader.readAsDataURL(file);
-    }
+      img.onerror = () => {
+        setLogoUrl(rawDataUrl);
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -228,11 +299,18 @@ export const EditProfilJurnalModal: React.FC<EditProfilJurnalModalProps> = ({
 
                 <div className="space-y-3 flex-1 text-center sm:text-left">
                   <div>
-                    <div className="text-xs font-bold text-slate-800">
-                      Pratinjau Logo Aktif
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Pratinjau Logo Aktif
+                      </span>
+                      {logoUrl && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
+                          ✓ Tersimpan Permanen
+                        </span>
+                      )}
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Mendukung format PNG, JPG, JPEG, SVG, atau WebP (transparan direkomendasikan).
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Mendukung format PNG, JPG, JPEG, SVG, atau WebP. Setelah disimpan, logo tersimpan permanen di database dan hanya berubah jika Anda mengunggah ulang logo baru.
                     </p>
                   </div>
 
