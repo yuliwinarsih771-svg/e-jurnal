@@ -295,7 +295,8 @@ export const exportJurnalToHtml = (
   tahun: number,
   subJudulOverride?: string,
   judulOverride?: string,
-  fileNameOverride?: string
+  fileNameOverride?: string,
+  orientation: 'landscape' | 'portrait' = 'landscape'
 ) => {
   const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
   const fullHtml = generateFullPrintHtml(
@@ -305,7 +306,8 @@ export const exportJurnalToHtml = (
     bulan,
     tahun,
     subJudulOverride,
-    judulOverride
+    judulOverride,
+    orientation
   );
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -325,8 +327,10 @@ export const generateFullPrintHtml = (
   bulan: number,
   tahun: number,
   subJudulOverride?: string,
-  judulOverride?: string
+  judulOverride?: string,
+  orientation: 'landscape' | 'portrait' = 'landscape'
 ): string => {
+  const isPortrait = orientation === 'portrait';
   const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
   const today = new Date();
   const tanggalTtd = `${pengaturan.kotaPenetapan}, ${today.getDate()} ${bulanNama} ${tahun}`;
@@ -382,15 +386,15 @@ export const generateFullPrintHtml = (
   <meta charset="utf-8">
   <title>${judulOverride || pengaturan.judulDokumen} - ${pegawai.nama}</title>
   <style>
-    @page { size: A4 landscape; margin: 8mm 10mm; }
+    @page { size: A4 ${orientation}; margin: 8mm 10mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #000; background: #fff; margin: 0; padding: 12px; }
-    .doc-title { text-align: center; font-weight: bold; font-size: 13pt; margin-bottom: 2px; text-transform: uppercase; }
-    .doc-sub { text-align: center; font-weight: bold; font-size: 11pt; margin-bottom: 14px; text-transform: uppercase; }
-    table.data-table { width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 9.5pt; }
-    table.data-table th { border: 1px solid #000; background-color: #f1f5f9; padding: 6px 4px; font-weight: bold; text-align: center; }
-    table.data-table td { border: 1px solid #000; }
-    .sig-table { width: 100%; border-collapse: collapse; border: none; margin-top: 25px; font-size: 10pt; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: ${isPortrait ? '10pt' : '11pt'}; color: #000; background: #fff; margin: 0; padding: ${isPortrait ? '8px' : '12px'}; }
+    .doc-title { text-align: center; font-weight: bold; font-size: ${isPortrait ? '12pt' : '13pt'}; margin-bottom: 2px; text-transform: uppercase; }
+    .doc-sub { text-align: center; font-weight: bold; font-size: ${isPortrait ? '10pt' : '11pt'}; margin-bottom: 14px; text-transform: uppercase; }
+    table.data-table { width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: ${isPortrait ? '8.2pt' : '9.5pt'}; }
+    table.data-table th { border: 1px solid #000; background-color: #f1f5f9; padding: ${isPortrait ? '4px 3px' : '6px 4px'}; font-weight: bold; text-align: center; }
+    table.data-table td { border: 1px solid #000; padding: ${isPortrait ? '4px 3px' : '5px'} !important; }
+    .sig-table { width: 100%; border-collapse: collapse; border: none; margin-top: 25px; font-size: ${isPortrait ? '9.5pt' : '10pt'}; }
     .sig-table td { border: none; vertical-align: top; }
   </style>
 </head>
@@ -399,7 +403,7 @@ export const generateFullPrintHtml = (
   <div class="doc-title">${(judulOverride || pengaturan.judulDokumen).toUpperCase()}</div>
   <div class="doc-sub">${subJudulOverride ? subJudulOverride.toUpperCase() : `BULAN ${bulanNama.toUpperCase()} ${tahun}`}</div>
 
-  <table style="border: none; margin-bottom: 12px; font-weight: bold; font-size: 10pt;">
+  <table style="border: none; margin-bottom: 12px; font-weight: bold; font-size: ${isPortrait ? '9.5pt' : '10pt'};">
     <tr><td style="width: 130px;">NAMA</td><td style="width: 15px; text-align: center;">:</td><td style="text-transform: uppercase;">${pegawai.nama}</td></tr>
     <tr><td>NIP</td><td style="text-align: center;">:</td><td>${pegawai.nip}</td></tr>
     <tr><td>JABATAN</td><td style="text-align: center;">:</td><td style="text-transform: uppercase;">${pegawai.jabatan}</td></tr>
@@ -410,14 +414,14 @@ export const generateFullPrintHtml = (
   <table class="data-table">
     <thead>
       <tr>
-        <th style="width: 32px;">No.</th>
-        <th style="width: 55px;">Hari</th>
-        <th style="width: 80px;">Tanggal</th>
-        <th style="width: 60px;">Nomor Kegiatan</th>
-        <th style="width: 85px;">Waktu</th>
+        <th style="width: ${isPortrait ? '24px' : '32px'};">No.</th>
+        <th style="width: ${isPortrait ? '44px' : '55px'};">Hari</th>
+        <th style="width: ${isPortrait ? '64px' : '80px'};">Tanggal</th>
+        <th style="width: ${isPortrait ? '46px' : '60px'};">Nomor Kegiatan</th>
+        <th style="width: ${isPortrait ? '68px' : '85px'};">Waktu</th>
         <th>Kegiatan / Pekerjaan</th>
         <th>Keluaran/Hasil (Output/Outcome)</th>
-        <th style="width: 110px;">Validasi Atasan Langsung (paraf)</th>
+        <th style="width: ${isPortrait ? '82px' : '110px'};">Validasi Atasan Langsung (paraf)</th>
       </tr>
     </thead>
     <tbody>
@@ -617,7 +621,7 @@ export const exportJurnalHtmlToPdf = async (
     const html2pdf = html2pdfModule.default || html2pdfModule;
 
     // Generate pure, clean HTML without any Tailwind classes or oklch colors
-    const fullHtml = generateFullPrintHtml(pegawai, pengaturan, kegiatanList, bulan, tahun, subJudulOverride, judulOverride);
+    const fullHtml = generateFullPrintHtml(pegawai, pengaturan, kegiatanList, bulan, tahun, subJudulOverride, judulOverride, orientation);
 
     const tempContainer = document.createElement('div');
     tempContainer.id = 'pdf-render-temp-container';

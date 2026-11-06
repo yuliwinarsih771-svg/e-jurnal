@@ -161,7 +161,8 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
         bulan,
         tahun,
         subJudulDokumen,
-        judulDokumen
+        judulDokumen,
+        orientation
       );
       printDocumentHtmlViaIframe(fullHtml);
       setTimeout(() => setStatusMessage(null), 3500);
@@ -268,7 +269,8 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
       tahun,
       subJudulDokumen,
       judulDokumen,
-      fileName
+      fileName,
+      orientation
     );
     setStatusMessage('Dokumen Web/HTML (.html) berhasil diunduh!');
     setTimeout(() => setStatusMessage(null), 3000);
@@ -282,6 +284,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
       data-print-hide="false"
       className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static"
     >
+      <style>{`@media print { @page { size: A4 ${orientation}; margin: 8mm 10mm; } }`}</style>
       {/* Modal Container */}
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden print:max-h-none print:shadow-none print:border-none print:w-full print:max-w-none print:rounded-none">
         
