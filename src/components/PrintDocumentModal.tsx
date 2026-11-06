@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   X, 
   Printer, 
@@ -11,7 +11,9 @@ import {
   Loader2,
   FileDown,
   Layout,
-  Check
+  Check,
+  ChevronDown,
+  Globe
 } from 'lucide-react';
 import { Pegawai, PengaturanInstansi, KegiatanJurnal } from '../types';
 import { 
@@ -19,6 +21,7 @@ import {
   formatTanggalIndonesia, 
   exportJurnalToExcel, 
   exportJurnalToWord,
+  exportJurnalToHtml,
   exportElementToPdf,
   exportJurnalHtmlToPdf,
   generateFullPrintHtml,
@@ -57,7 +60,9 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
   initialTanggal,
 }) => {
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState<boolean>(false);
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -67,6 +72,28 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
     initialTanggal || `${tahun}-${bulan.toString().padStart(2, '0')}-12`
   );
   const [selectedMingguKe, setSelectedMingguKe] = useState<number>(1);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPeriodeMode(initialPeriodeMode || 'bulanan');
+      if (initialTanggal) {
+        setSelectedTanggalHarian(initialTanggal);
+      }
+      setIsDownloadMenuOpen(false);
+    }
+  }, [isOpen, initialPeriodeMode, initialTanggal]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setIsDownloadMenuOpen(false);
+      }
+    };
+    if (isDownloadMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDownloadMenuOpen]);
 
   if (!isOpen) return null;
 
@@ -225,6 +252,28 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
+  const handleHtml = () => {
+    const cleanName = pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = periodeMode === 'harian'
+      ? `Jurnal_Harian_${cleanName}_${selectedTanggalHarian}.html`
+      : periodeMode === 'mingguan'
+        ? `Jurnal_Mingguan_${cleanName}_Minggu_${selectedMingguKe}_${bulanNama}_${tahun}.html`
+        : `Jurnal_Bulanan_${cleanName}_${bulanNama}_${tahun}.html`;
+
+    exportJurnalToHtml(
+      pegawai,
+      pengaturan,
+      filtered,
+      bulan,
+      tahun,
+      subJudulDokumen,
+      judulDokumen,
+      fileName
+    );
+    setStatusMessage('Dokumen Web/HTML (.html) berhasil diunduh!');
+    setTimeout(() => setStatusMessage(null), 3000);
+  };
+
   const today = new Date();
   const tanggalTtd = `${pengaturan.kotaPenetapan}, ${today.getDate()} ${bulanNama} ${tahun}`;
 
@@ -306,6 +355,87 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
               </button>
             </div>
 
+            {/* Menu Download Dropdown */}
+            <div className="relative" ref={downloadMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsDownloadMenuOpen((prev) => !prev)}
+                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+                title="Menu Download Dokumen (PDF, Word, Excel, HTML)"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isDownloadMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isDownloadMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-200 py-1.5 z-50 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3.5 py-1.5 border-b border-slate-100">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      Pilih Format Unduhan
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDownloadMenuOpen(false);
+                      handleDownloadPdf();
+                    }}
+                    disabled={isGeneratingPdf}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-rose-50 text-slate-700 hover:text-rose-700 flex items-center space-x-2.5 transition cursor-pointer"
+                  >
+                    <FileDown className="w-4 h-4 text-rose-600 shrink-0" />
+                    <div>
+                      <div className="font-bold">Download PDF (.pdf)</div>
+                      <div className="text-[10px] text-slate-400">Format Cetak Resmi A4</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDownloadMenuOpen(false);
+                      handleWord();
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 flex items-center space-x-2.5 transition cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div>
+                      <div className="font-bold">Download Word (.doc)</div>
+                      <div className="text-[10px] text-slate-400">Dapat Diedit di MS Word</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDownloadMenuOpen(false);
+                      handleExcel();
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 flex items-center space-x-2.5 transition cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <div className="font-bold">Download Excel (.xlsx)</div>
+                      <div className="text-[10px] text-slate-400">Tabel Spreadsheet Rekap</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDownloadMenuOpen(false);
+                      handleHtml();
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-semibold hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center space-x-2.5 transition cursor-pointer"
+                  >
+                    <Globe className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="font-bold">Download HTML (.html)</div>
+                      <div className="text-[10px] text-slate-400">Dokumen Web Siap Cetak</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Excel Button */}
             <button
               onClick={handleExcel}
@@ -313,7 +443,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
               title="Unduh Format Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Excel</span>
+              <span className="hidden sm:inline">Excel</span>
             </button>
 
             {/* Word Button */}
@@ -323,7 +453,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
               title="Unduh Format Word (.doc)"
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Word</span>
+              <span className="hidden sm:inline">Word</span>
             </button>
 
             {/* Direct PDF Download Button */}

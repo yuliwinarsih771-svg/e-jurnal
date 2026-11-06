@@ -284,7 +284,38 @@ export const exportJurnalToWord = (
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+export const exportJurnalToHtml = (
+  pegawai: Pegawai,
+  pengaturan: PengaturanInstansi,
+  kegiatanList: KegiatanJurnal[],
+  bulan: number,
+  tahun: number,
+  subJudulOverride?: string,
+  judulOverride?: string,
+  fileNameOverride?: string
+) => {
+  const bulanNama = BULAN_INDONESIA[bulan - 1] || 'Januari';
+  const fullHtml = generateFullPrintHtml(
+    pegawai,
+    pengaturan,
+    kegiatanList,
+    bulan,
+    tahun,
+    subJudulOverride,
+    judulOverride
+  );
+  const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileNameOverride || `Jurnal_${pegawai.nama.replace(/[^a-zA-Z0-9]/g, '_')}_${bulanNama}_${tahun}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 export const generateFullPrintHtml = (
@@ -633,6 +664,8 @@ export const exportJurnalHtmlToPdf = async (
         useCORS: true, 
         logging: false,
         backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
         onclone: (clonedDoc: Document) => {
           // 1. Remove all main application stylesheets from clonedDoc.
           // They contain Tailwind CSS v4 variables with oklch(...) colors that crash html2canvas.
