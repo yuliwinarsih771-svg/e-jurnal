@@ -223,7 +223,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                <span>{item.label}</span>
+                <span className="sm:hidden">{item.shortLabel}</span>
+                <span className="hidden sm:inline">{item.label}</span>
                 {item.badge !== null && (
                   <span
                     className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full font-bold leading-none ${

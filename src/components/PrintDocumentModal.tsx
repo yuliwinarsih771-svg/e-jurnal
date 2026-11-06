@@ -328,7 +328,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
           </div>
 
           {/* Action Buttons: Orientation, Excel, Word, Download PDF, Print */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full md:w-auto justify-between sm:justify-end">
             
             {/* Orientation Toggle */}
             <div className="inline-flex rounded-xl bg-slate-800 p-0.5 border border-slate-700 text-xs">
@@ -618,7 +618,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
         </div>
 
         {/* Paper Document Preview Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-8 bg-slate-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
           <div 
             ref={printAreaRef}
             id="printable-document-content"
@@ -628,7 +628,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
               fontFamily: "'Times New Roman', Times, serif",
               borderColor: '#cbd5e1',
             }}
-            className={`text-xs leading-tight shadow-md border p-8 sm:p-12 print-clean-document transition-all ${
+            className={`text-xs leading-tight shadow-md border p-4 sm:p-12 print-clean-document transition-all ${
               orientation === 'landscape' ? 'w-full max-w-[1020px]' : 'w-full max-w-[760px]'
             }`}
           >
