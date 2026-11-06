@@ -812,7 +812,7 @@ export const PrintDocumentModal: React.FC<PrintDocumentModalProps> = ({
                 {/* Row 2: Signature / Paraf Space */}
                 <tr>
                   <td className="h-16 align-middle py-1 pr-4">
-                    <div style={{ border: '1px dashed #94a3b8', color: '#475569' }} className="px-3 py-1 text-[9px] font-mono inline-block">
+                    <div style={{ border: '1px dashed #94a3b8', color: '#475569' }} className="px-3 py-1 text-[9px] font-mono inline-block print:hidden">
                       [ TERPARAF ELEKTRONIK ]
                     </div>
                   </td>

@@ -446,9 +446,7 @@ export const generateFullPrintHtml = (
       </td>
     </tr>
     <tr>
-      <td style="height: 55px; vertical-align: middle;">
-        <span style="border: 1px dashed #94a3b8; padding: 2px 6px; font-size: 8pt; font-family: monospace; color: #475569;">[ TERPARAF ELEKTRONIK ]</span>
-      </td>
+      <td style="height: 55px; vertical-align: middle;"></td>
       <td style="height: 55px; padding-left: 30px;"></td>
     </tr>
     <tr>
