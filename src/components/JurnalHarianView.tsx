@@ -1066,7 +1066,7 @@ export const JurnalHarianView: React.FC<JurnalHarianViewProps> = ({
               {/* Row 2: Ruang Tanda Tangan / Paraf Digital (Tinggi Sama Persis) */}
               <tr>
                 <td className="h-16 align-middle py-1 pr-4">
-                  <div className="px-3 py-1 bg-emerald-50 border border-dashed border-emerald-300 rounded-lg text-emerald-700 text-[10px] font-mono font-semibold inline-flex items-center space-x-1.5">
+                  <div className="px-3 py-1 bg-emerald-50 border border-dashed border-emerald-300 rounded-lg text-emerald-700 text-[10px] font-mono font-semibold inline-flex items-center space-x-1.5 print:hidden">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     <span>TERVERIFIKASI SISTEM ELEKTRONIK</span>
                   </div>
