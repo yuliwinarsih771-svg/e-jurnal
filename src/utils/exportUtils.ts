@@ -364,16 +364,16 @@ export const generateFullPrintHtml = (
 
   const logoToUse = pengaturan.logoUrl || PRESET_LOGO_PEMDA;
   const kopHtml = `
-    <table style="width: 100%; border-collapse: collapse; border-bottom: 3px double #000; margin-bottom: 14px;">
+    <table style="width: 100%; border-collapse: collapse; border-bottom: 3px double #000; margin-bottom: 18px;">
       <tr>
-        <td style="width: 80px; vertical-align: middle; text-align: left; border: none; padding-bottom: 8px;">
-          <img src="${logoToUse}" alt="Logo Instansi" style="max-height: 75px; max-width: 75px; object-fit: contain; display: block;" />
+        <td style="width: 80px; vertical-align: middle; text-align: center; border: none; padding-bottom: 10px;">
+          <img src="${logoToUse}" alt="Logo Instansi" style="max-height: 75px; max-width: 75px; object-fit: contain; display: block; margin: 0 auto;" />
         </td>
-        <td style="text-align: center; vertical-align: middle; border: none; padding-bottom: 8px;">
-          <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">${pengaturan.namaInstansi}</div>
+        <td style="text-align: center; vertical-align: middle; border: none; padding: 0 12px 10px 12px;">
+          <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;">${pengaturan.namaInstansi}</div>
           <div style="font-size: 13pt; font-weight: 900; text-transform: uppercase;">${pengaturan.badanDinas}</div>
-          <div style="font-size: 10.5pt; font-weight: bold; text-transform: uppercase;">${pengaturan.bidangBagian || pegawai.unitKerja || ''}</div>
-          <div style="font-size: 8.5pt; font-style: italic;">${pengaturan.alamat || ''}</div>
+          ${(pengaturan.bidangBagian || pegawai.unitKerja) ? `<div style="font-size: 10.5pt; font-weight: bold; text-transform: uppercase;">${pengaturan.bidangBagian || pegawai.unitKerja}</div>` : ''}
+          ${pengaturan.alamat ? `<div style="font-size: 8.5pt; font-style: italic; margin-top: 2px;">${pengaturan.alamat}</div>` : ''}
         </td>
         <td style="width: 80px; border: none;"></td>
       </tr>
@@ -388,12 +388,12 @@ export const generateFullPrintHtml = (
   <style>
     @page { size: A4 ${orientation}; margin: 8mm 10mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Times New Roman', Times, serif; font-size: ${isPortrait ? '10pt' : '11pt'}; color: #000; background: #fff; margin: 0; padding: ${isPortrait ? '8px' : '12px'}; }
-    .doc-title { text-align: center; font-weight: bold; font-size: ${isPortrait ? '12pt' : '13pt'}; margin-bottom: 2px; text-transform: uppercase; }
-    .doc-sub { text-align: center; font-weight: bold; font-size: ${isPortrait ? '10pt' : '11pt'}; margin-bottom: 14px; text-transform: uppercase; }
-    table.data-table { width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: ${isPortrait ? '8.2pt' : '9.5pt'}; }
-    table.data-table th { border: 1px solid #000; background-color: #f1f5f9; padding: ${isPortrait ? '4px 3px' : '6px 4px'}; font-weight: bold; text-align: center; }
-    table.data-table td { border: 1px solid #000; padding: ${isPortrait ? '4px 3px' : '5px'} !important; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: ${isPortrait ? '10pt' : '11pt'}; color: #000; background: #fff; margin: 0; padding: ${isPortrait ? '14px 18px' : '12px'}; }
+    .doc-title { text-align: center; font-weight: bold; font-size: ${isPortrait ? '13.5pt' : '13pt'}; letter-spacing: 0.05em; margin-bottom: 2px; text-transform: uppercase; }
+    .doc-sub { text-align: center; font-weight: bold; font-size: ${isPortrait ? '9.5pt' : '11pt'}; margin-bottom: 20px; text-transform: uppercase; }
+    table.data-table { width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: ${isPortrait ? '8.5pt' : '9.5pt'}; line-height: 1.35; }
+    table.data-table th { border: 1px solid #000; background-color: #f1f5f9; padding: 6px 4px; font-weight: bold; text-align: center; }
+    table.data-table td { border: 1px solid #000; padding: ${isPortrait ? '5px 4px' : '5px'} !important; vertical-align: top; }
     .sig-table { width: 100%; border-collapse: collapse; border: none; margin-top: 25px; font-size: ${isPortrait ? '9.5pt' : '10pt'}; }
     .sig-table td { border: none; vertical-align: top; }
   </style>
@@ -403,25 +403,25 @@ export const generateFullPrintHtml = (
   <div class="doc-title">${(judulOverride || pengaturan.judulDokumen).toUpperCase()}</div>
   <div class="doc-sub">${subJudulOverride ? subJudulOverride.toUpperCase() : `BULAN ${bulanNama.toUpperCase()} ${tahun}`}</div>
 
-  <table style="border: none; margin-bottom: 12px; font-weight: bold; font-size: ${isPortrait ? '9.5pt' : '10pt'};">
-    <tr><td style="width: 130px;">NAMA</td><td style="width: 15px; text-align: center;">:</td><td style="text-transform: uppercase;">${pegawai.nama}</td></tr>
-    <tr><td>NIP</td><td style="text-align: center;">:</td><td>${pegawai.nip}</td></tr>
-    <tr><td>JABATAN</td><td style="text-align: center;">:</td><td style="text-transform: uppercase;">${pegawai.jabatan}</td></tr>
-    <tr><td>UNIT KERJA</td><td style="text-align: center;">:</td><td style="text-transform: uppercase;">${pegawai.unitKerja}</td></tr>
-    ${pegawai.pangkatGolongan ? `<tr><td>PANGKAT / GOL.</td><td style="text-align: center;">:</td><td>${pegawai.pangkatGolongan}</td></tr>` : ''}
+  <table style="width: 100%; max-width: 620px; border: none; margin-bottom: 16px; font-weight: bold; font-size: ${isPortrait ? '9.5pt' : '10pt'}; line-height: 1.65;">
+    <tr><td style="width: 165px; padding: 1px 0;">NAMA</td><td style="width: 36px; text-align: center; padding: 1px 0;">:</td><td style="text-transform: uppercase; padding: 1px 0;">${pegawai.nama}</td></tr>
+    <tr><td style="padding: 1px 0;">NIP</td><td style="text-align: center; padding: 1px 0;">:</td><td style="padding: 1px 0;">${pegawai.nip}</td></tr>
+    <tr><td style="padding: 1px 0;">JABATAN</td><td style="text-align: center; padding: 1px 0;">:</td><td style="text-transform: uppercase; padding: 1px 0;">${pegawai.jabatan}</td></tr>
+    <tr><td style="padding: 1px 0;">UNIT KERJA</td><td style="text-align: center; padding: 1px 0;">:</td><td style="text-transform: uppercase; padding: 1px 0;">${pegawai.unitKerja}</td></tr>
+    ${pegawai.pangkatGolongan ? `<tr><td style="padding: 1px 0;">PANGKAT / GOL.</td><td style="text-align: center; padding: 1px 0;">:</td><td style="padding: 1px 0;">${pegawai.pangkatGolongan}</td></tr>` : ''}
   </table>
 
   <table class="data-table">
     <thead>
       <tr>
-        <th style="width: ${isPortrait ? '24px' : '32px'};">No.</th>
-        <th style="width: ${isPortrait ? '44px' : '55px'};">Hari</th>
-        <th style="width: ${isPortrait ? '64px' : '80px'};">Tanggal</th>
-        <th style="width: ${isPortrait ? '46px' : '60px'};">Nomor Kegiatan</th>
-        <th style="width: ${isPortrait ? '68px' : '85px'};">Waktu</th>
+        <th style="width: ${isPortrait ? '26px' : '32px'};">No.</th>
+        <th style="width: ${isPortrait ? '46px' : '55px'};">Hari</th>
+        <th style="width: ${isPortrait ? '66px' : '80px'};">Tanggal</th>
+        <th style="width: ${isPortrait ? '48px' : '60px'};">Nomor Kegiatan</th>
+        <th style="width: ${isPortrait ? '70px' : '85px'};">Waktu</th>
         <th>Kegiatan / Pekerjaan</th>
         <th>Keluaran/Hasil (Output/Outcome)</th>
-        <th style="width: ${isPortrait ? '82px' : '110px'};">Validasi Atasan Langsung (paraf)</th>
+        <th style="width: ${isPortrait ? '84px' : '110px'};">Validasi Atasan Langsung (paraf)</th>
       </tr>
     </thead>
     <tbody>
@@ -429,8 +429,8 @@ export const generateFullPrintHtml = (
     </tbody>
   </table>
 
-  <div style="border: 1px solid #000; border-top: none; padding: 5px 10px; font-weight: bold; font-size: 9.5pt; background: #f8fafc; text-align: right;">
-    TOTAL AKTIVITAS KERJA : ${kegiatanList.length}
+  <div style="border: 1px solid #000; border-top: none; padding: 6px 10px; font-weight: bold; font-size: ${isPortrait ? '9pt' : '9.5pt'}; background: #f8fafc; text-align: right;">
+    TOTAL AKTIVITAS KERJA : <span style="background: #fff; border: 1px solid #000; padding: 1px 6px; font-family: monospace; margin-left: 6px;">${kegiatanList.length.toString().padStart(2, '0')}</span>
   </div>
 
   <table class="sig-table">
