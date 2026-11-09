@@ -558,6 +558,25 @@ export default function App() {
     }
   };
 
+  const handleResetPassword = async (pegId: string, newPassword: string) => {
+    // 1. Update state & localStorage
+    setPegawaiList((prev) => {
+      const updated = prev.map((p) => (p.id === pegId ? { ...p, password: newPassword } : p));
+      savePegawai(updated);
+      return updated;
+    });
+
+    // 2. Persist to Firestore
+    const target = pegawaiList.find((p) => p.id === pegId);
+    if (target) {
+      try {
+        await savePegawaiToFirestore({ ...target, password: newPassword });
+      } catch (err) {
+        console.warn('Gagal sinkron password baru ke Firestore:', err);
+      }
+    }
+  };
+
   // Render Login Screen if no authenticated user session
   if (!authUser) {
     return (
@@ -567,6 +586,7 @@ export default function App() {
         onLogin={handleLogin}
         onDeletePegawai={handleDeletePegawaiPermanently}
         onPurgeDemoAccounts={handlePurgeDemoAccounts}
+        onResetPassword={handleResetPassword}
       />
     );
   }
