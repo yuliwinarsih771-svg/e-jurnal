@@ -161,31 +161,31 @@ export const PengaturanAdminView: React.FC<PengaturanAdminViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-6">
       
       {/* Alert banner */}
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl text-emerald-800 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
-          <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+        <div className="p-3 sm:p-4 bg-emerald-50 border border-emerald-300 rounded-xl sm:rounded-2xl text-emerald-800 text-[11px] sm:text-xs font-bold flex items-center space-x-2 animate-in fade-in">
+          <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
 
       {/* Super Admin Notice Card */}
       {isSuperAdmin && (
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-start space-x-3">
-            <div className="p-2 bg-rose-600 text-white rounded-xl shrink-0 mt-0.5">
-              <ShieldCheck className="w-5 h-5" />
+        <div className="p-3 sm:p-5 bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 shadow-xs">
+          <div className="flex items-start space-x-2.5 sm:space-x-3">
+            <div className="p-1.5 sm:p-2 bg-rose-600 text-white rounded-lg sm:rounded-xl shrink-0 mt-0.5">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-rose-600 text-white rounded-full">
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <span className="px-2 py-0.5 text-[9px] sm:text-[10px] font-extrabold uppercase bg-rose-600 text-white rounded-full">
                   Peran Super Admin Aktif
                 </span>
-                <span className="text-xs font-bold text-rose-900">Hak Akses Seluruh Jurnal & Pengaturan</span>
+                <span className="text-[11px] sm:text-xs font-bold text-rose-900">Hak Akses Seluruh Jurnal & Pengaturan</span>
               </div>
-              <p className="text-xs text-rose-800 mt-1">
+              <p className="text-[11px] sm:text-xs text-rose-800 mt-0.5 sm:mt-1">
                 Akun Super Admin memiliki wewenang penuh untuk mengecek jurnal semua pegawai harian, melihat semua lembar jurnal, rekapitulasi, cetak dokumen resmi, serta mengelola konfigurasi kop & master data instansi.
               </p>
             </div>
@@ -195,9 +195,9 @@ export const PengaturanAdminView: React.FC<PengaturanAdminViewProps> = ({
             <button
               type="button"
               onClick={onGoToProfile}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center space-x-2 shrink-0 cursor-pointer self-start sm:self-auto"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] sm:text-xs font-bold rounded-lg sm:rounded-xl shadow-xs transition flex items-center space-x-1.5 shrink-0 cursor-pointer self-start sm:self-auto"
             >
-              <User className="w-4 h-4" />
+              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Kelola Profil Super Admin</span>
             </button>
           )}
@@ -205,33 +205,33 @@ export const PengaturanAdminView: React.FC<PengaturanAdminViewProps> = ({
       )}
 
       {/* Top Header Card */}
-      <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-200">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-xs border border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4">
           <div>
-            <div className="flex items-center space-x-2">
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold ${
                 isSuperAdmin ? 'bg-rose-100 text-rose-800' : 'bg-purple-100 text-purple-800'
               } tracking-wider uppercase`}>
                 {isSuperAdmin ? 'Panel Super Administrator' : 'Panel Kontrol Administrator'}
               </span>
-              <span className="text-xs text-slate-400">|</span>
-              <span className="text-xs text-slate-500">Konfigurasi Pengaturan Per Akun</span>
+              <span className="text-[11px] sm:text-xs text-slate-400">|</span>
+              <span className="text-[11px] sm:text-xs text-slate-500">Konfigurasi Pengaturan Per Akun</span>
             </div>
-            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1">
+            <h2 className="text-base sm:text-xl font-extrabold text-slate-900 mt-0.5 sm:mt-1">
               Pengaturan Instansi & Pejabat Penilai Per Akun
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
               Setiap akun dapat memiliki kop instansi, bidang bagian, pejabat penilai (atasan langsung), dan toleransi jam kerja yang berbeda-beda.
             </p>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
             <button
               onClick={handleExportBackup}
-              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] sm:text-xs font-semibold rounded-lg sm:rounded-xl transition flex items-center space-x-1 sm:space-x-1.5"
               title="Unduh Backup Pengaturan JSON"
             >
-              <Download className="w-4 h-4 text-slate-500" />
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
               <span>Backup JSON</span>
             </button>
             <button
@@ -240,10 +240,10 @@ export const PengaturanAdminView: React.FC<PengaturanAdminViewProps> = ({
                   onResetData();
                 }
               }}
-              className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-red-50 hover:bg-red-100 text-red-700 text-[10px] sm:text-xs font-semibold rounded-lg sm:rounded-xl transition flex items-center space-x-1 sm:space-x-1.5"
               title="Reset ke Template Contoh Awal"
             >
-              <RotateCcw className="w-4 h-4 text-red-600" />
+              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" />
               <span>Reset Sistem</span>
             </button>
           </div>
@@ -251,7 +251,7 @@ export const PengaturanAdminView: React.FC<PengaturanAdminViewProps> = ({
       </div>
 
       {/* Account Selector Card for Per-User Settings */}
-      <div className="bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-md border border-blue-800">
+      <div className="bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 text-white rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-md border border-blue-800">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
           <div className="space-y-1.5 max-w-xl">
             <div className="flex items-center space-x-2">

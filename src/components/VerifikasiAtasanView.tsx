@@ -182,45 +182,45 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
   const atasanJabatan = currentPegawai.role === 'atasan' ? currentPegawai.jabatan : (pengaturan.jabatanAtasan || currentPegawai.jabatan);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-6">
       
       {/* Top Banner & Info */}
-      <div className="bg-gradient-to-r from-amber-800 via-indigo-950 to-slate-900 text-white rounded-2xl p-6 shadow-sm border border-slate-800">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="bg-gradient-to-r from-amber-800 via-indigo-950 to-slate-900 text-white rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-sm border border-slate-800">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2.5 sm:gap-4">
           <div>
-            <div className="flex items-center space-x-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-900 tracking-wider uppercase">
-                Akun Atasan Aktif
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-amber-400 text-slate-900 tracking-wider uppercase">
+                Akun Atasan
               </span>
-              <span className="text-xs text-amber-200">
+              <span className="text-[11px] sm:text-xs text-amber-200">
                 Pejabat Penilai Kinerja
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold mt-1">
+            <h2 className="text-base sm:text-2xl font-bold mt-0.5 sm:mt-1">
               Verifikasi & Paraf Laporan Kinerja Staf
             </h2>
-            <p className="text-xs text-blue-100 mt-1 max-w-2xl">
-              Pejabat Penilai: <strong className="text-white">{atasanNama}</strong> (NIP. {atasanNip}) &bull; {atasanJabatan}. Setiap kegiatan bawahan yang disetujui akan otomatis dibubuhi paraf elektronik resmi Anda.
+            <p className="text-[11px] sm:text-xs text-blue-100 mt-0.5 sm:mt-1 max-w-2xl">
+              Pejabat Penilai: <strong className="text-white">{atasanNama}</strong> (NIP. {atasanNip}) &bull; {atasanJabatan}.
             </p>
           </div>
 
           {/* Quick Batch Button & Monitoring Jump */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0">
             {onGoToMonitoring && (
               <button
                 onClick={onGoToMonitoring}
-                className="px-3.5 py-2.5 sm:px-4 sm:py-3 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs sm:text-sm rounded-xl transition flex items-center space-x-2 border border-white/20 cursor-pointer"
+                className="px-2.5 py-1.5 sm:px-4 sm:py-3 bg-white/10 hover:bg-white/20 text-white font-semibold text-[11px] sm:text-sm rounded-lg sm:rounded-xl transition flex items-center space-x-1.5 border border-white/20 cursor-pointer"
               >
-                <UserCheck className="w-4 h-4 text-amber-300" />
+                <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
                 <span>Cek Jurnal Harian</span>
               </button>
             )}
             {pendingIds.length > 0 && (
               <button
                 onClick={handleBatchApproveAll}
-                className="px-3.5 py-2.5 sm:px-4 sm:py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-bold text-xs sm:text-sm rounded-xl shadow-lg transition flex items-center space-x-2 cursor-pointer"
+                className="px-2.5 py-1.5 sm:px-4 sm:py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-bold text-[11px] sm:text-sm rounded-lg sm:rounded-xl shadow-lg transition flex items-center space-x-1.5 cursor-pointer"
               >
-                <CheckCheck className="w-5 h-5 text-slate-900" />
+                <CheckCheck className="w-4 h-4 sm:w-5 sm:h-5 text-slate-900" />
                 <span>Beri Paraf Semua ({pendingIds.length})</span>
               </button>
             )}
@@ -229,19 +229,19 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
       </div>
 
       {/* Filter Bar */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-xs border border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Subordinate Selector */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase mb-0.5 sm:mb-1">
                 Pilih Staf / Pegawai
               </label>
               <select
                 value={selectedSubordinateId}
                 onChange={(e) => setSelectedSubordinateId(e.target.value)}
-                className="text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                className="text-[11px] sm:text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
               >
                 <option value="all">Semua Staf Bawahan</option>
                 {subordinates.map((sub) => (
@@ -254,15 +254,15 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
 
             {/* Status Filter Tabs */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase mb-0.5 sm:mb-1">
                 Status Verifikasi
               </label>
-              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex items-center space-x-1 bg-slate-100 p-0.5 sm:p-1 rounded-lg sm:rounded-xl">
                 {(['Menunggu', 'Disetujui', 'Ditolak', 'all'] as const).map((st) => (
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-md sm:rounded-lg transition ${
                       statusFilter === st
                         ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -275,7 +275,7 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
             </div>
           </div>
 
-          <div className="text-xs text-slate-500 font-medium">
+          <div className="text-[10px] sm:text-xs text-slate-500 font-medium">
             Periode: <strong className="text-slate-800">{BULAN_INDONESIA[selectedBulan - 1]} {selectedTahun}</strong>
           </div>
 

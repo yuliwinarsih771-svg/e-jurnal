@@ -235,68 +235,68 @@ export const RekapitulasiView: React.FC<RekapitulasiViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 sm:space-y-6">
       
       {/* Top Header Card */}
-      <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-xs border border-slate-200">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-xs border border-slate-200">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 sm:gap-4">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 tracking-wider uppercase">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-blue-100 text-blue-800 tracking-wider uppercase">
                 {isRegularPegawai ? 'Rekapitulasi Akun Saya' : 'Rekapitulasi Kinerja Bulanan'}
               </span>
-              <span className="text-xs text-slate-500 font-medium">
+              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">
                 {pengaturan.badanDinas}
               </span>
             </div>
             
-            <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1">
+            <h2 className="text-base sm:text-xl font-extrabold text-slate-900 mt-0.5 sm:mt-1">
               Rekapitulasi Bulanan Per User ({activeUser.nama})
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
               Periode Bulan {BULAN_INDONESIA[selectedBulan - 1]} Tahun {selectedTahun} • Evaluasi Kinerja & Catatan Harian Pegawai
             </p>
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               onClick={handleExportUserExcel}
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 shadow-xs"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-semibold rounded-lg sm:rounded-xl transition flex items-center space-x-1 sm:space-x-1.5 shadow-xs"
               title="Unduh Rekap Bulanan Excel"
             >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span className="hidden sm:inline">Excel</span>
+              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Excel</span>
             </button>
 
             <button
               onClick={handleExportUserWord}
-              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 shadow-xs"
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] sm:text-xs font-semibold rounded-lg sm:rounded-xl transition flex items-center space-x-1 sm:space-x-1.5 shadow-xs"
               title="Unduh Rekap Bulanan Word"
             >
-              <FileText className="w-4 h-4" />
-              <span className="hidden sm:inline">Word</span>
+              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Word</span>
             </button>
 
             <button
               onClick={onOpenPrintModal}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-xs"
+              className="px-3 sm:px-3.5 py-1.5 sm:py-2 bg-slate-800 hover:bg-slate-900 text-white text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl transition flex items-center space-x-1 sm:space-x-1.5 shadow-xs"
               title="Cetak Sesuai Format Resmi / PDF"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Cetak / PDF Rekap</span>
             </button>
           </div>
         </div>
 
         {/* Filter Controls (User Selector, Bulan, Tahun, View Toggle) */}
-        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-3 sm:mt-5 pt-2.5 sm:pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
           
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
             {/* If Admin/Atasan, allow choosing which user to inspect */}
             {!isRegularPegawai && (
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                <label className="block text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase mb-0.5 sm:mb-1">
                   Pilih Pegawai
                 </label>
                 <select
@@ -306,7 +306,7 @@ export const RekapitulasiView: React.FC<RekapitulasiViewProps> = ({
                       setSelectedPegawaiId(e.target.value);
                     }
                   }}
-                  className="text-xs font-semibold px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  className="text-[11px] sm:text-xs font-semibold px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                 >
                   {allPegawai.map((peg) => (
                     <option key={peg.id} value={peg.id}>

@@ -66,32 +66,32 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-12 sm:h-20">
           
           {/* Logo & Agency Title */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-700 via-indigo-700 to-blue-900 flex items-center justify-center text-white shadow-sm ring-2 ring-blue-100 shrink-0">
-              <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-blue-700 via-indigo-700 to-blue-900 flex items-center justify-center text-white shadow-sm ring-1 sm:ring-2 ring-blue-100 shrink-0">
+              <Building2 className="w-4 h-4 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold tracking-wider uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                  E-JURNAL HARIAN PEGAWAI
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <span className="text-[9px] sm:text-xs font-bold tracking-wider uppercase text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                  E-JURNAL
                 </span>
                 <span className="hidden sm:inline-block text-xs text-slate-400">|</span>
                 <span className="hidden sm:inline-block text-xs font-medium text-slate-500">
                   {pengaturan.namaInstansi}
                 </span>
               </div>
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-tight truncate max-w-[200px] sm:max-w-md lg:max-w-xl">
+              <h1 className="text-xs sm:text-base font-bold text-slate-900 tracking-tight leading-tight truncate max-w-[150px] xs:max-w-[200px] sm:max-w-md lg:max-w-xl">
                 {pengaturan.bidangBagian || pengaturan.badanDinas}
               </h1>
             </div>
           </div>
 
           {/* Right Section: Time & Role Switcher */}
-          <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-1 sm:space-x-4">
             
             {/* Realtime clock display (Desktop) */}
             <div className="hidden lg:flex items-center space-x-3 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
@@ -115,7 +115,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Guide & DB Docs Button */}
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-0.5 sm:space-x-1">
               <button
                 onClick={onOpenLaravelDocs}
                 className="hidden md:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-700 hover:bg-blue-50 transition border border-slate-200"
@@ -127,10 +127,10 @@ export const Header: React.FC<HeaderProps> = ({
               
               <button
                 onClick={onOpenGuide}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
+                className="p-1 sm:p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition"
                 title="Petunjuk Penggunaan & Format Jurnal"
               >
-                <HelpCircle className="w-5 h-5 text-slate-500" />
+                <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500" />
               </button>
             </div>
 
@@ -138,11 +138,11 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative">
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center space-x-2 p-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition text-left"
+                className="flex items-center space-x-1.5 p-1 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition text-left"
               >
-                <div className={`w-8 h-8 rounded-lg ${
+                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg ${
                   currentPegawai.role === 'superadmin' ? 'bg-rose-600' : 'bg-blue-600'
-                } text-white flex items-center justify-center font-bold text-xs shadow-xs overflow-hidden`}>
+                } text-white flex items-center justify-center font-bold text-[11px] sm:text-xs shadow-xs overflow-hidden`}>
                   {currentPegawai.foto ? (
                     <img src={currentPegawai.foto} alt={currentPegawai.nama} className="w-full h-full object-cover" />
                   ) : (
@@ -160,7 +160,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </span>
                   </div>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Dropdown Menu */}
