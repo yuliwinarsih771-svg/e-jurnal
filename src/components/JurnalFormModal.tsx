@@ -167,32 +167,32 @@ export const JurnalFormModal: React.FC<JurnalFormModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92dvh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white px-5 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
           <div>
-            <span className="text-xs font-semibold text-blue-200 tracking-wider uppercase">
+            <span className="text-[10px] sm:text-xs font-semibold text-blue-200 tracking-wider uppercase">
               Formulir E-Kinerja
             </span>
-            <h2 className="text-lg font-bold">
+            <h2 className="text-base sm:text-lg font-bold">
               {editingKegiatan ? 'Edit Kegiatan Jurnal Harian' : 'Tambah Kegiatan Harian Baru'}
             </h2>
-            <p className="text-xs text-blue-100 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-blue-100 mt-0.5">
               {currentPegawai.nama} — {currentPegawai.jabatan}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-blue-100 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+            className="text-blue-100 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 no-scrollbar touch-pan-y">
           
           {errorMsg && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center space-x-2">

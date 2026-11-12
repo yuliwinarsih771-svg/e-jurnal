@@ -17,6 +17,7 @@ import {
 import { UserRole } from '../types';
 
 export type NavTab = 
+  | 'dashboard'
   | 'jurnal' 
   | 'jurnal-harian' 
   | 'jurnal-mingguan' 
@@ -205,10 +206,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <nav className="bg-white border-b border-slate-200">
-      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-1.5 sm:px-6 lg:px-8 pl-[max(0.375rem,env(safe-area-inset-left))] pr-[max(0.375rem,env(safe-area-inset-right))]">
         
         {/* Desktop / Tablet Scrollable Tabs */}
-        <div className="flex space-x-1 sm:space-x-2 overflow-x-auto py-1.5 sm:py-2.5 no-scrollbar">
+        <div className="flex space-x-1 sm:space-x-2 overflow-x-auto py-1 sm:py-2.5 no-scrollbar touch-pan-x">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id || (activeTab === 'jurnal' && item.id === 'jurnal-harian');
@@ -216,18 +217,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
-                className={`flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-sm font-semibold transition whitespace-nowrap shrink-0 ${
+                className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-1 sm:py-2 rounded-md sm:rounded-xl text-[10px] sm:text-sm font-semibold transition whitespace-nowrap shrink-0 ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <Icon className={`w-3 h-3 sm:w-4 sm:h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                 <span className="sm:hidden">{item.shortLabel}</span>
                 <span className="hidden sm:inline">{item.label}</span>
                 {item.badge !== null && (
                   <span
-                    className={`ml-1 px-1.5 py-0.5 text-[9px] sm:text-[10px] rounded-full font-bold leading-none ${
+                    className={`ml-0.5 sm:ml-1 px-1 py-0.2 sm:px-1.5 sm:py-0.5 text-[8px] sm:text-[10px] rounded-full font-bold leading-none ${
                       isActive
                         ? 'bg-white text-blue-700'
                         : item.highlight

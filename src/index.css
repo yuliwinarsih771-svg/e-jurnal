@@ -1,5 +1,75 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   iOS & iPhone Optimization Styles
+   - Notch & Dynamic Island Support (env safe-area-inset)
+   - Home Indicator bottom swipe bar clearance
+   - Native input appearance & touch highlight removal
+   - Momentum scrolling on WebKit (-webkit-overflow-scrolling: touch)
+   ========================================================================== */
+
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* iOS Safari Date & Time picker clean styling */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 2rem;
+}
+
+/* Hide scrollbar on iOS/WebKit while preserving touch momentum scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe Area Inset Utility Classes for iPhone Notch, Dynamic Island, and Home Bar */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.top-safe {
+  top: env(safe-area-inset-top, 0px);
+}
+
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @media print {
   @page {
     margin: 8mm 10mm;
@@ -19,7 +89,8 @@
   header,
   nav,
   footer,
-  .print\\:hidden,
+  aside,
+  .print\:hidden,
   [data-print-hide="true"] {
     display: none !important;
   }

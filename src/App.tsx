@@ -4,8 +4,10 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Header } from './components/Header';
-import { Navbar, NavTab } from './components/Navbar';
+import { NavTab } from './components/Navbar';
+import { WpAdminBar } from './components/WpAdminBar';
+import { WpSidebar } from './components/WpSidebar';
+import { WpDashboardView } from './components/WpDashboardView';
 import { JurnalHarianView } from './components/JurnalHarianView';
 import { JurnalFormModal } from './components/JurnalFormModal';
 import { VerifikasiAtasanView } from './components/VerifikasiAtasanView';
@@ -16,7 +18,7 @@ import { PrintDocumentModal } from './components/PrintDocumentModal';
 import { LaravelApiGuideModal } from './components/LaravelApiGuideModal';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { LoginView } from './components/LoginView';
-import { ProfilSuperAdminView } from './components/ProfilSuperAdminView';
+import { ProfilPenggunaView } from './components/ProfilPenggunaView';
 import { TambahUserView } from './components/TambahUserView';
 
 import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord } from './types';
@@ -72,7 +74,9 @@ export default function App() {
   const [isFirebaseSynced, setIsFirebaseSynced] = useState<boolean>(false);
 
   // Navigation & Filtering
-  const [activeTab, setActiveTab] = useState<NavTab>('jurnal');
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [isWpSidebarCollapsed, setIsWpSidebarCollapsed] = useState<boolean>(false);
+  const [isWpMobileSidebarOpen, setIsWpMobileSidebarOpen] = useState<boolean>(false);
   const [selectedBulan, setSelectedBulan] = useState<number>(1); // Default Januari
   const [selectedTahun, setSelectedTahun] = useState<number>(2026);
   const [selectedPegawaiId, setSelectedPegawaiId] = useState<string>(currentUserId);
@@ -227,7 +231,19 @@ export default function App() {
   // - Non-Atasan & Non-SuperAdmin: Tidak dapat membuka 'verifikasi' dan 'monitoring'
   useEffect(() => {
     if (currentPegawai.role === 'atasan') {
-      const allowedForAtasan = ['verifikasi', 'monitoring', 'jurnal', 'jurnal-harian', 'jurnal-mingguan', 'jurnal-bulanan', 'cetak'];
+      const allowedForAtasan = [
+        'dashboard',
+        'verifikasi',
+        'monitoring',
+        'jurnal',
+        'jurnal-harian',
+        'jurnal-mingguan',
+        'jurnal-bulanan',
+        'rekapitulasi',
+        'cetak',
+        'profil',
+        'pengaturan'
+      ];
       if (!allowedForAtasan.includes(activeTab)) {
         setActiveTab('verifikasi');
       }
@@ -301,6 +317,18 @@ export default function App() {
       saveAuthUser(updated);
       return updated;
     });
+
+    // Jika akun yang diupdate adalah Atasan, sinkronkan data penilai ke pengaturan instansi
+    if (currentPegawai.role === 'atasan') {
+      const atasanSettingsPatch: Partial<PengaturanInstansi> = {};
+      if (updatedData.nama) atasanSettingsPatch.namaAtasan = updatedData.nama;
+      if (updatedData.nip) atasanSettingsPatch.nipAtasan = updatedData.nip;
+      if (updatedData.jabatan) atasanSettingsPatch.jabatanAtasan = updatedData.jabatan;
+      if (updatedData.pangkatGolongan) atasanSettingsPatch.pangkatAtasan = updatedData.pangkatGolongan;
+      if (Object.keys(atasanSettingsPatch).length > 0) {
+        handleSaveAccountPengaturan(currentPegawai.id, { ...currentPengaturan, ...atasanSettingsPatch });
+      }
+    }
   };
 
   const handleUpdatePegawaiProfile = (pegId: string, updatedData: Partial<Pegawai>) => {
@@ -577,6 +605,43 @@ export default function App() {
     }
   };
 
+  // Quick Draft saver from WordPress Dashboard widget
+  const handleQuickDraft = async (kegiatan: string, outputHasil: string) => {
+    const now = new Date();
+    const hariArr = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const hari = hariArr[now.getDay()];
+    const yyyy = now.getFullYear();
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd = now.getDate().toString().padStart(2, '0');
+    const tanggal = `${yyyy}-${mm}-${dd}`;
+
+    setSelectedTahun(now.getFullYear());
+    setSelectedBulan(now.getMonth() + 1);
+
+    const existingToday = kegiatanList.filter(
+      (k) => k.pegawaiId === currentPegawai.id && k.tanggal === tanggal
+    );
+    const nomorKegiatan = (existingToday.length + 1).toString().padStart(2, '0');
+
+    const newKegiatan: KegiatanJurnal = {
+      id: `keg-${Date.now()}`,
+      pegawaiId: currentPegawai.id,
+      tanggal,
+      hari,
+      nomorKegiatan,
+      waktuMulai: '08:00',
+      waktuSelesai: '09:00',
+      kegiatan,
+      outputHasil,
+      statusValidasi: 'Menunggu',
+    };
+
+    setKegiatanList((prev) => [newKegiatan, ...prev]);
+    saveKegiatanToFirestore(newKegiatan).catch((err) => {
+      console.warn('Sync draft notice:', err);
+    });
+  };
+
   // Render Login Screen if no authenticated user session
   if (!authUser) {
     return (
@@ -592,44 +657,38 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#f0f0f1] font-sans antialiased">
       
-      {/* Header */}
-      <Header
+      {/* WordPress Admin Top Bar */}
+      <WpAdminBar
         currentPegawai={currentPegawai}
         allPegawai={pegawaiList}
         pengaturan={currentPengaturan}
+        pendingVerifikasiCount={pendingVerifikasiCount}
         onSelectPegawai={handleSelectPegawai}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenLaravelDocs={() => setIsLaravelDocsOpen(true)}
         onLogout={handleLogout}
         onNavigateToProfile={() => setActiveTab('profil')}
+        onNavigateToTab={(tab) => {
+          if (tab === 'cetak') {
+            setIsPrintModalOpen(true);
+          } else {
+            setActiveTab(tab as NavTab);
+          }
+        }}
+        onOpenAddKegiatan={() => {
+          setEditingKegiatan(null);
+          setIsJurnalModalOpen(true);
+        }}
+        onToggleSidebarMobile={() => setIsWpMobileSidebarOpen(!isWpMobileSidebarOpen)}
+        isSidebarMobileOpen={isWpMobileSidebarOpen}
       />
 
-      {/* Navigation Tabs */}
-      <Navbar
+      {/* WordPress Admin Left Sidebar */}
+      <WpSidebar
         activeTab={activeTab}
         onTabChange={(tab) => {
-          if (currentPegawai.role === 'superadmin') {
-            if (tab === 'cetak') {
-              setIsPrintModalOpen(true);
-            } else if (tab !== 'pengaturan') {
-              setActiveTab(tab);
-            }
-            return;
-          }
-          if (currentPegawai.role === 'atasan') {
-            if (tab === 'cetak') {
-              setIsPrintModalOpen(true);
-            } else {
-              setActiveTab(tab);
-            }
-            return;
-          }
-          if (tab === 'verifikasi' || tab === 'monitoring') {
-            setActiveTab('jurnal-harian');
-            return;
-          }
           if (tab === 'cetak') {
             setIsPrintModalOpen(true);
           } else {
@@ -638,11 +697,44 @@ export default function App() {
         }}
         pendingVerifikasiCount={pendingVerifikasiCount}
         userRole={currentPegawai.role}
+        isCollapsed={isWpSidebarCollapsed}
+        onToggleCollapse={() => setIsWpSidebarCollapsed(!isWpSidebarCollapsed)}
+        isMobileOpen={isWpMobileSidebarOpen}
+        onCloseMobile={() => setIsWpMobileSidebarOpen(false)}
+        onOpenAddKegiatan={() => {
+          setEditingKegiatan(null);
+          setIsJurnalModalOpen(true);
+        }}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-6 lg:px-8 py-2.5 sm:py-8">
-        {(activeTab === 'jurnal' || activeTab === 'jurnal-harian' || activeTab === 'jurnal-mingguan' || activeTab === 'jurnal-bulanan') && (
+      {/* Main WordPress Content Area with Dynamic Sidebar Margin */}
+      <div className={`transition-all duration-200 pt-8 min-h-screen flex flex-col justify-between ${
+        isWpSidebarCollapsed ? 'md:pl-11' : 'md:pl-44'
+      }`}>
+        <main className="flex-1 w-full max-w-[1500px] p-2.5 sm:p-5 mx-auto">
+          {activeTab === 'dashboard' && (
+            <WpDashboardView
+              currentPegawai={currentPegawai}
+              allPegawai={pegawaiList}
+              kegiatanList={kegiatanList}
+              pengaturan={targetPengaturan}
+              onNavigateToTab={(tab) => {
+                if (tab === 'cetak') {
+                  setIsPrintModalOpen(true);
+                } else {
+                  setActiveTab(tab as NavTab);
+                }
+              }}
+              onAddQuickDraft={handleQuickDraft}
+              onDeleteKegiatan={handleDeleteKegiatan}
+              onOpenJurnalModal={() => {
+                setEditingKegiatan(null);
+                setIsJurnalModalOpen(true);
+              }}
+            />
+          )}
+
+          {(activeTab === 'jurnal' || activeTab === 'jurnal-harian' || activeTab === 'jurnal-mingguan' || activeTab === 'jurnal-bulanan') && (
           <JurnalHarianView
             currentPegawai={currentPegawai}
             allPegawai={pegawaiList}
@@ -793,50 +885,42 @@ export default function App() {
         )}
 
         {activeTab === 'profil' && (
-          <ProfilSuperAdminView
+          <ProfilPenggunaView
             currentPegawai={currentPegawai}
-            allPegawai={pegawaiList}
             pengaturan={currentPengaturan}
-            kegiatanList={kegiatanList}
             onUpdateProfile={handleUpdateProfile}
-            onAddPegawai={handleAddPegawai}
-            onNavigateToTab={(tab) => {
-              if (tab === 'cetak') {
-                setIsPrintModalOpen(true);
-              } else {
-                setActiveTab(tab);
-              }
-            }}
+            allPegawai={pegawaiList}
+            kegiatanList={kegiatanList}
+            onSwitchAccount={handleSelectPegawai}
+            onNavigateToTab={(tab) => setActiveTab(tab as NavTab)}
           />
         )}
-      </main>
 
-      {/* Footer with Firebase Cloud Database Status */}
-      <footer className="bg-white border-t border-slate-200 py-3.5 print:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2.5">
-          <div className="flex items-center space-x-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span className="font-bold text-slate-800">Database: Firebase Firestore</span>
-            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-200 px-2 py-0.5 rounded-full flex items-center space-x-1">
-              <span>Cloud Realtime Aktif</span>
-            </span>
-          </div>
+        </main>
 
-          <div className="flex items-center space-x-3 text-[11px] text-slate-500">
-            <span>{currentPengaturan.namaInstansi}</span>
+        {/* WordPress Admin Footer */}
+        <footer className="py-2.5 px-3 sm:px-6 text-xs text-[#50575e] border-t border-[#dcdcde] bg-[#f0f0f1] flex flex-col sm:flex-row items-center justify-between gap-1.5 print:hidden">
+          <p>
+            Terima kasih telah menggunakan <span className="text-[#2271b1] font-semibold">WordPress</span> &amp; <span className="font-semibold text-slate-700">{currentPengaturan.namaInstansi || 'E-Jurnal Kinerja'}</span>.
+          </p>
+          <div className="flex items-center space-x-3 text-[11px] text-[#8c8f94]">
+            <span className="flex items-center space-x-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-slate-600 font-medium">Firestore Realtime Aktif</span>
+            </span>
             <span>&bull;</span>
             <button
+              type="button"
               onClick={() => setIsLaravelDocsOpen(true)}
-              className="text-blue-600 hover:underline font-semibold"
+              className="text-[#2271b1] hover:underline"
             >
-              Panduan Arsitektur API
+              Dokumentasi API
             </button>
+            <span>&bull;</span>
+            <span>Versi 5.1.1</span>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
 
       {/* Modals */}
       <JurnalFormModal

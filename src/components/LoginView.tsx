@@ -176,7 +176,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 flex flex-col justify-center py-4 px-3 font-['Plus_Jakarta_Sans',sans-serif] relative overflow-hidden">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 flex flex-col justify-center py-4 px-3 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] font-['Plus_Jakarta_Sans',sans-serif] relative overflow-hidden">
       
       {/* Background decoration elements */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b18_1px,transparent_1px),linear-gradient(to_bottom,#1e293b18_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none opacity-40" />
@@ -353,7 +353,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       {/* Lupa Password Modal */}
       {isForgotModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xs overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="h-1 bg-gradient-to-r from-amber-500 via-blue-600 to-indigo-600" />
             
