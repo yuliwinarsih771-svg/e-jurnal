@@ -1,30 +1,33 @@
-import React, { useState } from 'react';
-import { 
-  Pin, 
-  FileText, 
-  MessageSquare, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  Calendar, 
-  ChevronDown, 
-  ChevronUp, 
-  Edit3, 
-  Trash2, 
-  ArrowRight, 
-  Info,
-  HelpCircle,
-  Sparkles,
-  ExternalLink,
-  ShieldCheck
+import React, { useState, useMemo } from 'react';
+import {
+  Plus,
+  Maximize2,
+  Minimize2,
+  ArrowRight,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Printer,
+  BellRing,
+  Send,
+  ChevronRight,
 } from 'lucide-react';
-import { Pegawai, KegiatanJurnal, PengaturanInstansi } from '../types';
-import { formatTanggalIndonesia, BULAN_INDONESIA } from '../utils/exportUtils';
+import {
+  Pegawai,
+  KegiatanJurnal,
+  PengaturanInstansi,
+  PresensiRecord,
+  PengingatJurnal,
+} from '../types';
+import { formatTanggalIndonesia } from '../utils/exportUtils';
 
 interface WpDashboardViewProps {
   currentPegawai: Pegawai;
   allPegawai: Pegawai[];
   kegiatanList: KegiatanJurnal[];
+  presensiList?: PresensiRecord[];
+  pengingatList?: PengingatJurnal[];
   pengaturan: PengaturanInstansi;
   onNavigateToTab: (tab: string) => void;
   onAddQuickDraft: (kegiatan: string, outputHasil: string) => Promise<void>;
@@ -32,49 +35,680 @@ interface WpDashboardViewProps {
   onOpenJurnalModal: () => void;
 }
 
+const getTodayIso = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const calcDurationHours = (mulai?: string, selesai?: string): number => {
+  if (!mulai || !selesai) return 0;
+  const [mH, mM] = mulai.split(':').map(Number);
+  const [sH, sM] = selesai.split(':').map(Number);
+  if (Number.isNaN(mH) || Number.isNaN(mM) || Number.isNaN(sH) || Number.isNaN(sM)) return 0;
+  const diff = sH * 60 + sM - (mH * 60 + mM);
+  return diff > 0 ? diff / 60 : 0;
+};
+
+interface MetricTripleItem {
+  label: string;
+  actual: string | number;
+  target: string | number;
+  ratio: number; // 0 to 100
+}
+
+interface SubObjectiveCell {
+  title: string;
+  actual: string | number;
+  target: string | number;
+  ratio: number; // 0 to 100
+}
+
+const ProgressBarMicro: React.FC<{ ratio: number; color?: 'cyan' | 'amber' | 'emerald' }> = ({
+  ratio,
+  color = 'cyan',
+}) => {
+  const clamped = Math.max(0, Math.min(100, Math.round(ratio)));
+  const fillClass =
+    color === 'amber'
+      ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.65)]'
+      : color === 'emerald'
+        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.65)]'
+        : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.7)]';
+  return (
+    <div className="w-full h-[3px] bg-sky-950/90 rounded-full overflow-hidden mt-1.5">
+      <div className={`h-full transition-all duration-300 ${fillClass}`} style={{ width: `${clamped}%` }} />
+    </div>
+  );
+};
+
+/* ============================================================================
+   HOLOGRAPHIC STAGE SVG ILLUSTRATIONS (MATCHING 4 COMMAND CARDS)
+   ============================================================================ */
+
+const HoloJurnalChartStage: React.FC = () => (
+  <div className="relative flex flex-col items-center justify-end h-28 select-none">
+    <svg viewBox="0 0 180 105" className="w-40 h-26 drop-shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+      <defs>
+        <linearGradient id="stageGlow1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#0284c7" stopOpacity="0.05" />
+        </linearGradient>
+        <linearGradient id="barCyan" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#38bdf8" />
+          <stop offset="100%" stopColor="#0369a1" stopOpacity="0.2" />
+        </linearGradient>
+        <linearGradient id="barWarm" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fb923c" />
+          <stop offset="100%" stopColor="#ea580c" stopOpacity="0.15" />
+        </linearGradient>
+      </defs>
+      {/* Perspective glowing pedestal */}
+      <polygon points="10,96 36,72 144,72 170,96" fill="url(#stageGlow1)" stroke="#38bdf8" strokeWidth="1.2" strokeOpacity="0.8" />
+      <line x1="16" y1="93" x2="164" y2="93" stroke="#22d3ee" strokeWidth="1.8" strokeOpacity="0.85" />
+      {/* Back holographic frame */}
+      <rect x="44" y="14" width="92" height="62" rx="4" fill="#071a38" fillOpacity="0.7" stroke="#38bdf8" strokeWidth="1" strokeOpacity="0.55" />
+      {/* Histogram bars */}
+      <rect x="52" y="50" width="7" height="22" fill="url(#barCyan)" rx="1" />
+      <rect x="63" y="38" width="7" height="34" fill="url(#barCyan)" rx="1" />
+      <rect x="74" y="30" width="7" height="42" fill="url(#barWarm)" rx="1" />
+      <rect x="85" y="24" width="7" height="48" fill="url(#barCyan)" rx="1" />
+      <rect x="96" y="34" width="7" height="38" fill="url(#barWarm)" rx="1" />
+      <rect x="107" y="42" width="7" height="30" fill="url(#barCyan)" rx="1" />
+      <rect x="118" y="48" width="7" height="24" fill="url(#barWarm)" rx="1" />
+      {/* Trend curve */}
+      <polyline
+        points="54,52 66,40 78,28 88,22 100,34 111,42 124,48"
+        fill="none"
+        stroke="#7dd3fc"
+        strokeWidth="1.8"
+      />
+      <circle cx="88" cy="22" r="2.8" fill="#fb923c" />
+      <circle cx="111" cy="42" r="2.2" fill="#38bdf8" />
+    </svg>
+  </div>
+);
+
+const HoloProductivityStage: React.FC = () => (
+  <div className="relative flex flex-col items-center justify-end h-28 select-none">
+    <svg viewBox="0 0 180 105" className="w-40 h-26 drop-shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+      <defs>
+        <linearGradient id="stageGlow2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#0284c7" stopOpacity="0.05" />
+        </linearGradient>
+      </defs>
+      {/* Perspective platform */}
+      <polygon points="10,96 36,72 144,72 170,96" fill="url(#stageGlow2)" stroke="#38bdf8" strokeWidth="1.2" strokeOpacity="0.8" />
+      <line x1="16" y1="93" x2="164" y2="93" stroke="#22d3ee" strokeWidth="1.8" strokeOpacity="0.85" />
+      {/* Briefcase / Console outline */}
+      <path d="M76,18 L104,18 L104,24 L76,24 Z" fill="none" stroke="#38bdf8" strokeWidth="1.2" strokeOpacity="0.7" />
+      <rect x="44" y="24" width="92" height="54" rx="7" fill="#071a38" fillOpacity="0.75" stroke="#38bdf8" strokeWidth="1.3" strokeOpacity="0.7" />
+      {/* Mini bars inside left */}
+      <rect x="55" y="48" width="5" height="18" fill="#38bdf8" rx="1" />
+      <rect x="63" y="42" width="5" height="24" fill="#fbbf24" rx="1" />
+      <rect x="71" y="52" width="5" height="14" fill="#22d3ee" rx="1" />
+      {/* Radial gauge inside right */}
+      <circle cx="105" cy="51" r="16" fill="none" stroke="#1e3a5f" strokeWidth="5" />
+      <circle
+        cx="105"
+        cy="51"
+        r="16"
+        fill="none"
+        stroke="#22d3ee"
+        strokeWidth="5"
+        strokeDasharray="62 100"
+        strokeLinecap="round"
+        transform="rotate(-90 105 51)"
+      />
+      <circle
+        cx="105"
+        cy="51"
+        r="16"
+        fill="none"
+        stroke="#f43f5e"
+        strokeWidth="5"
+        strokeDasharray="24 100"
+        strokeLinecap="round"
+        transform="rotate(140 105 51)"
+      />
+      <circle cx="105" cy="51" r="6" fill="#0ea5e9" fillOpacity="0.25" stroke="#7dd3fc" strokeWidth="1" />
+    </svg>
+  </div>
+);
+
+const HoloHumanResourceStage: React.FC = () => (
+  <div className="relative flex flex-col items-center justify-end h-28 select-none">
+    <svg viewBox="0 0 180 105" className="w-40 h-26 drop-shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+      <defs>
+        <linearGradient id="stageGlow3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#0284c7" stopOpacity="0.05" />
+        </linearGradient>
+        <linearGradient id="hrFrame" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fb923c" />
+          <stop offset="50%" stopColor="#38bdf8" />
+          <stop offset="100%" stopColor="#34d399" />
+        </linearGradient>
+      </defs>
+      {/* Perspective platform */}
+      <polygon points="10,96 36,72 144,72 170,96" fill="url(#stageGlow3)" stroke="#38bdf8" strokeWidth="1.2" strokeOpacity="0.8" />
+      <line x1="16" y1="93" x2="164" y2="93" stroke="#22d3ee" strokeWidth="1.8" strokeOpacity="0.85" />
+      {/* Glowing rounded HUD frame */}
+      <rect x="52" y="18" width="76" height="58" rx="9" fill="#081d3d" fillOpacity="0.78" stroke="url(#hrFrame)" strokeWidth="1.6" />
+      {/* Scan lines */}
+      <line x1="60" y1="30" x2="78" y2="30" stroke="#fb923c" strokeWidth="1" strokeOpacity="0.65" />
+      <line x1="104" y1="35" x2="120" y2="35" stroke="#38bdf8" strokeWidth="1" strokeOpacity="0.65" />
+      <line x1="104" y1="45" x2="118" y2="45" stroke="#34d399" strokeWidth="1" strokeOpacity="0.65" />
+      {/* Human silhouette */}
+      <circle cx="90" cy="34" r="5.5" fill="none" stroke="#e0f2fe" strokeWidth="1.5" />
+      <path d="M81,43 C81,40 99,40 99,43 L97,56 L94,56 L94,68 L86,68 L86,56 L83,56 Z" fill="#38bdf8" fillOpacity="0.22" stroke="#bae6fd" strokeWidth="1.3" />
+    </svg>
+  </div>
+);
+
+const HoloProcessStage: React.FC = () => (
+  <div className="relative flex flex-col items-center justify-end h-28 select-none">
+    <svg viewBox="0 0 180 105" className="w-40 h-26 drop-shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+      <defs>
+        <linearGradient id="stageGlow4" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#0284c7" stopOpacity="0.05" />
+        </linearGradient>
+      </defs>
+      {/* Perspective platform */}
+      <polygon points="10,96 36,72 144,72 170,96" fill="url(#stageGlow4)" stroke="#38bdf8" strokeWidth="1.2" strokeOpacity="0.8" />
+      <line x1="16" y1="93" x2="164" y2="93" stroke="#22d3ee" strokeWidth="1.8" strokeOpacity="0.85" />
+      {/* Outer process case */}
+      <path d="M77,17 L103,17 L103,23 L77,23 Z" fill="none" stroke="#38bdf8" strokeWidth="1.2" />
+      <rect x="46" y="23" width="88" height="54" rx="10" fill="#071a38" fillOpacity="0.75" stroke="#38bdf8" strokeWidth="1.4" strokeOpacity="0.75" />
+      {/* Workflow circuit path */}
+      <polyline points="62,50 82,50 82,38 112,38" fill="none" stroke="#fb7185" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="68,50 74,44" fill="none" stroke="#fb7185" strokeWidth="2.2" strokeLinecap="round" />
+      <polyline points="68,50 74,56" fill="none" stroke="#fb7185" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="114" cy="38" r="4" fill="#fb923c" />
+      <rect x="92" y="52" width="24" height="12" rx="2" fill="#0ea5e9" fillOpacity="0.25" stroke="#38bdf8" strokeWidth="1.2" />
+      <line x1="84" y1="58" x2="92" y2="58" stroke="#38bdf8" strokeWidth="1.4" />
+    </svg>
+  </div>
+);
+
 export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
   currentPegawai,
+  allPegawai,
   kegiatanList,
+  presensiList = [],
+  pengingatList = [],
   pengaturan,
   onNavigateToTab,
   onAddQuickDraft,
   onDeleteKegiatan,
   onOpenJurnalModal,
 }) => {
-  // Screen options & Help toggles (authentic WordPress top drawers)
-  const [showScreenOptions, setShowScreenOptions] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  // Widget collapse states
-  const [collapseAtGlance, setCollapseAtGlance] = useState(false);
-  const [collapseQuickDraft, setCollapseQuickDraft] = useState(false);
-  const [collapseActivity, setCollapseActivity] = useState(false);
-
-  // Quick Draft Form States
+  // Quick Draft Form States (preserved 100%)
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
   const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
   const [draftSuccessMsg, setDraftSuccessMsg] = useState<string | null>(null);
 
-  // Calculate statistics for the current user
-  const userKegiatan = kegiatanList.filter((k) => k.pegawaiId === currentPegawai.id);
-  const totalKegiatan = userKegiatan.length;
-  const approvedKegiatan = userKegiatan.filter((k) => k.statusValidasi === 'Disetujui').length;
-  const pendingKegiatan = userKegiatan.filter((k) => k.statusValidasi === 'Menunggu').length;
+  const todayIso = useMemo(getTodayIso, []);
+  const isSupervisorView =
+    currentPegawai.role === 'superadmin' || currentPegawai.role === 'atasan';
 
-  // Calculate total hours
-  const totalJam = userKegiatan.reduce((acc, k) => {
-    if (k.waktuMulai && k.waktuSelesai) {
-      const [mH, mM] = k.waktuMulai.split(':').map(Number);
-      const [sH, sM] = k.waktuSelesai.split(':').map(Number);
-      const diff = (sH * 60 + sM) - (mH * 60 + mM);
-      if (diff > 0) return acc + diff / 60;
-    }
-    return acc;
-  }, 0);
+  // Scope activities & attendance based on logged-in user (or full org for superadmin/atasan monitoring overview)
+  const userKegiatan = useMemo(
+    () => kegiatanList.filter((k) => k.pegawaiId === currentPegawai.id),
+    [kegiatanList, currentPegawai.id]
+  );
 
-  // Recent 5 activities
-  const recentKegiatan = [...userKegiatan].slice(0, 5);
+  const scopeKegiatan = useMemo(
+    () => (isSupervisorView ? kegiatanList : userKegiatan),
+    [isSupervisorView, kegiatanList, userKegiatan]
+  );
+
+  const scopePresensi = useMemo(
+    () =>
+      isSupervisorView
+        ? presensiList
+        : presensiList.filter((p) => p.pegawaiId === currentPegawai.id),
+    [isSupervisorView, presensiList, currentPegawai.id]
+  );
+
+  // Real KPI calculations
+  const metrics = useMemo(() => {
+    const totalEntri = scopeKegiatan.length;
+    const disetujui = scopeKegiatan.filter((k) => k.statusValidasi === 'Disetujui').length;
+    const menunggu = scopeKegiatan.filter((k) => k.statusValidasi === 'Menunggu').length;
+    const ditolak = scopeKegiatan.filter((k) => k.statusValidasi === 'Ditolak').length;
+
+    const totalJam = scopeKegiatan.reduce(
+      (acc, k) => acc + calcDurationHours(k.waktuMulai, k.waktuSelesai),
+      0
+    );
+    const jamHariIni = scopeKegiatan
+      .filter((k) => k.tanggal === todayIso)
+      .reduce((acc, k) => acc + calcDurationHours(k.waktuMulai, k.waktuSelesai), 0);
+
+    const denganOutput = scopeKegiatan.filter((k) => Boolean(k.outputHasil?.trim())).length;
+    const denganBukti = scopeKegiatan.filter((k) => Boolean(k.tautanBukti?.trim())).length;
+
+    const pagiCount = scopeKegiatan.filter((k) => {
+      const hour = parseInt((k.waktuMulai || '08:00').split(':')[0], 10);
+      return !Number.isNaN(hour) && hour < 12;
+    }).length;
+    const siangCount = totalEntri - pagiCount;
+
+    const uniqueHariAktif = new Set(scopeKegiatan.map((k) => k.tanggal)).size;
+    const rataRataPerHari = uniqueHariAktif > 0 ? totalEntri / uniqueHariAktif : 0;
+
+    // SDM & Accounts
+    const totalPegawai = allPegawai.length;
+    const nonSuperAdmin = allPegawai.filter((p) => p.role !== 'superadmin');
+    const atasanCount = allPegawai.filter((p) => p.role === 'atasan').length;
+    const filledTodayIds = new Set(
+      kegiatanList.filter((k) => k.tanggal === todayIso).map((k) => k.pegawaiId)
+    );
+    const belumIsiHariIni = nonSuperAdmin.filter((p) => !filledTodayIds.has(p.id)).length;
+
+    // Presensi
+    const totalPresensi = scopePresensi.length;
+    const hadirKantor = scopePresensi.filter((p) => p.status === 'Hadir').length;
+    const wfhDinas = scopePresensi.filter(
+      (p) => p.status === 'WFH' || p.status === 'Dinas Luar'
+    ).length;
+    const izinSakitCuti = scopePresensi.filter(
+      (p) => p.status === 'Izin' || p.status === 'Sakit' || p.status === 'Cuti'
+    ).length;
+    const hadirTotal = hadirKantor + wfhDinas;
+    const terlambatCount = scopePresensi.filter((p) => (p.terlambatMenit || 0) > 0).length;
+    const tepatWaktuCount = Math.max(0, hadirTotal - terlambatCount);
+    const totalMenitTelat = scopePresensi.reduce((acc, p) => acc + (p.terlambatMenit || 0), 0);
+
+    // Pengingat
+    const myPengingat = pengingatList.filter((pg) => pg.pegawaiId === currentPegawai.id);
+    const myUnreadPengingat = myPengingat.filter((pg) => pg.status === 'unread').length;
+    const totalPengingatSent = pengingatList.length;
+    const totalPengingatRead = pengingatList.filter(
+      (pg) => pg.status === 'read' || pg.status === 'resolved'
+    ).length;
+    const totalPengingatResolved = pengingatList.filter((pg) => pg.status === 'resolved').length;
+
+    // Targets & Percentages
+    const targetEntriBulan = Math.max(20, isSupervisorView ? nonSuperAdmin.length * 10 : 20);
+    const targetJamBulan = Math.max(40, isSupervisorView ? nonSuperAdmin.length * 40 : 120);
+    const targetHariKerja = 22;
+
+    const pctEntri = Math.min(100, Math.round((totalEntri / targetEntriBulan) * 100));
+    const pctDisetujui = totalEntri > 0 ? Math.round((disetujui / totalEntri) * 100) : 0;
+    const pctJam = Math.min(100, Math.round((totalJam / targetJamBulan) * 100));
+    const pctBukti = totalEntri > 0 ? Math.round((denganBukti / totalEntri) * 100) : 0;
+    const pctOutput = totalEntri > 0 ? Math.round((denganOutput / totalEntri) * 100) : 0;
+    const pctHadir =
+      totalPresensi > 0 ? Math.round((hadirTotal / totalPresensi) * 100) : totalEntri > 0 ? 100 : 0;
+    const pctTepatWaktu =
+      hadirTotal > 0 ? Math.round((tepatWaktuCount / hadirTotal) * 100) : 100;
+    const pctHariAktif = Math.min(100, Math.round((uniqueHariAktif / targetHariKerja) * 100));
+    const pctPengingatSelesai =
+      totalPengingatSent > 0
+        ? Math.round((totalPengingatResolved / totalPengingatSent) * 100)
+        : 100;
+
+    return {
+      totalEntri,
+      disetujui,
+      menunggu,
+      ditolak,
+      totalJam,
+      jamHariIni,
+      denganOutput,
+      denganBukti,
+      pagiCount,
+      siangCount,
+      uniqueHariAktif,
+      rataRataPerHari,
+      totalPegawai,
+      atasanCount,
+      belumIsiHariIni,
+      nonSuperAdminCount: nonSuperAdmin.length,
+      totalPresensi,
+      hadirKantor,
+      wfhDinas,
+      izinSakitCuti,
+      hadirTotal,
+      terlambatCount,
+      tepatWaktuCount,
+      totalMenitTelat,
+      myUnreadPengingat,
+      totalPengingatSent,
+      totalPengingatRead,
+      totalPengingatResolved,
+      targetEntriBulan,
+      targetJamBulan,
+      targetHariKerja,
+      pctEntri,
+      pctDisetujui,
+      pctJam,
+      pctBukti,
+      pctOutput,
+      pctHadir,
+      pctTepatWaktu,
+      pctHariAktif,
+      pctPengingatSelesai,
+    };
+  }, [scopeKegiatan, scopePresensi, allPegawai, kegiatanList, pengingatList, currentPegawai.id, todayIso, isSupervisorView]);
+
+  // Top 4 Theme In-depth Analysis Cards
+  const topAnalysisCards: {
+    id: string;
+    title: string;
+    targetTab: string;
+    stage: React.ReactNode;
+    triples: MetricTripleItem[];
+    footerLabel: string;
+    footerValue: string;
+  }[] = [
+    {
+      id: 'jurnal',
+      title: 'Analisis Jurnal Harian',
+      targetTab: 'jurnal-harian',
+      stage: <HoloJurnalChartStage />,
+      triples: [
+        {
+          label: 'Total Entri',
+          actual: metrics.totalEntri,
+          target: metrics.targetEntriBulan,
+          ratio: metrics.pctEntri,
+        },
+        {
+          label: 'Disetujui',
+          actual: metrics.disetujui,
+          target: Math.max(metrics.totalEntri, 1),
+          ratio: metrics.pctDisetujui,
+        },
+        {
+          label: 'Menunggu',
+          actual: metrics.menunggu,
+          target: 0,
+          ratio: metrics.totalEntri > 0 ? Math.max(10, 100 - Math.round((metrics.menunggu / metrics.totalEntri) * 100)) : 100,
+        },
+      ],
+      footerLabel: 'Tingkat Capaian / Persetujuan Jurnal',
+      footerValue: `${metrics.pctEntri}% | ${metrics.pctDisetujui}%`,
+    },
+    {
+      id: 'jam-output',
+      title: 'Analisis Jam & Produktivitas',
+      targetTab: 'rekapitulasi',
+      stage: <HoloProductivityStage />,
+      triples: [
+        {
+          label: 'Jam Efektif',
+          actual: metrics.totalJam.toFixed(1),
+          target: metrics.targetJamBulan,
+          ratio: metrics.pctJam,
+        },
+        {
+          label: 'Output Valid',
+          actual: metrics.denganOutput,
+          target: Math.max(metrics.totalEntri, 1),
+          ratio: metrics.pctOutput,
+        },
+        {
+          label: 'Bukti Link',
+          actual: metrics.denganBukti,
+          target: Math.max(metrics.totalEntri, 1),
+          ratio: metrics.pctBukti,
+        },
+      ],
+      footerLabel: 'Efektivitas Jam Kerja / Kelengkapan Output',
+      footerValue: `${metrics.pctJam}% | ${metrics.pctOutput}%`,
+    },
+    {
+      id: 'sdm-hadir',
+      title: 'Analisis SDM & Kehadiran',
+      targetTab: isSupervisorView ? 'monitoring' : 'jurnal-harian',
+      stage: <HoloHumanResourceStage />,
+      triples: [
+        {
+          label: 'Pegawai',
+          actual: metrics.totalPegawai,
+          target: metrics.totalPegawai,
+          ratio: 100,
+        },
+        {
+          label: 'Hadir Kerja',
+          actual: metrics.hadirTotal,
+          target: Math.max(metrics.totalPresensi, metrics.targetHariKerja),
+          ratio: metrics.pctHadir,
+        },
+        {
+          label: 'Terlambat',
+          actual: metrics.terlambatCount,
+          target: 0,
+          ratio: metrics.pctTepatWaktu,
+        },
+      ],
+      footerLabel: 'Rasio Kehadiran / Ketepatan Waktu',
+      footerValue: `${metrics.pctHadir}% / ${metrics.pctTepatWaktu}%`,
+    },
+    {
+      id: 'proses-pengingat',
+      title: 'Analisis Proses & Pengingat',
+      targetTab: 'pengingat',
+      stage: <HoloProcessStage />,
+      triples: [
+        {
+          label: 'Hari Aktif',
+          actual: metrics.uniqueHariAktif,
+          target: metrics.targetHariKerja,
+          ratio: metrics.pctHariAktif,
+        },
+        {
+          label: 'Pengingat',
+          actual: isSupervisorView ? metrics.totalPengingatSent : metrics.myUnreadPengingat,
+          target: 0,
+          ratio: metrics.pctPengingatSelesai,
+        },
+        {
+          label: 'Revisi',
+          actual: metrics.ditolak,
+          target: 0,
+          ratio: metrics.totalEntri > 0 ? Math.max(0, 100 - Math.round((metrics.ditolak / metrics.totalEntri) * 100)) : 100,
+        },
+      ],
+      footerLabel: 'Progres Hari Kerja / Penyelesaian Pengingat',
+      footerValue: `${metrics.pctHariAktif}% / ${metrics.pctPengingatSelesai}%`,
+    },
+  ];
+
+  // Bottom 4 Strategic Objectives Panels (6 cells each)
+  const strategicPanels: {
+    id: string;
+    title: string;
+    cells: SubObjectiveCell[];
+  }[] = [
+    {
+      id: 'capaian-jurnal',
+      title: 'Capaian Jurnal',
+      cells: [
+        {
+          title: 'Total Kegiatan',
+          actual: metrics.totalEntri,
+          target: metrics.targetEntriBulan,
+          ratio: metrics.pctEntri,
+        },
+        {
+          title: 'Disetujui Atasan',
+          actual: metrics.disetujui,
+          target: Math.max(metrics.totalEntri, 1),
+          ratio: metrics.pctDisetujui,
+        },
+        {
+          title: 'Menunggu Paraf',
+          actual: metrics.menunggu,
+          target: 0,
+          ratio: metrics.totalEntri > 0 ? Math.max(5, 100 - Math.round((metrics.menunggu / metrics.totalEntri) * 100)) : 100,
+        },
+        {
+          title: 'Revisi / Ditolak',
+          actual: metrics.ditolak,
+          target: 0,
+          ratio: metrics.ditolak === 0 ? 100 : 40,
+        },
+        {
+          title: 'Hari Mengisi',
+          actual: metrics.uniqueHariAktif,
+          target: metrics.targetHariKerja,
+          ratio: metrics.pctHariAktif,
+        },
+        {
+          title: 'Rata-rata / Hari',
+          actual: metrics.rataRataPerHari.toFixed(1),
+          target: '3.0',
+          ratio: Math.min(100, (metrics.rataRataPerHari / 3) * 100),
+        },
+      ],
+    },
+    {
+      id: 'pegawai-pengingat',
+      title: 'Pegawai & Pengingat',
+      cells: [
+        {
+          title: 'Akun Terdaftar',
+          actual: metrics.totalPegawai,
+          target: metrics.totalPegawai,
+          ratio: 100,
+        },
+        {
+          title: 'Atasan Penilai',
+          actual: metrics.atasanCount,
+          target: Math.max(metrics.atasanCount, 1),
+          ratio: metrics.atasanCount > 0 ? 100 : 20,
+        },
+        {
+          title: 'Belum Isi Hari Ini',
+          actual: metrics.belumIsiHariIni,
+          target: 0,
+          ratio:
+            metrics.nonSuperAdminCount > 0
+              ? Math.round(((metrics.nonSuperAdminCount - metrics.belumIsiHariIni) / metrics.nonSuperAdminCount) * 100)
+              : 100,
+        },
+        {
+          title: 'Pengingat Terkirim',
+          actual: metrics.totalPengingatSent,
+          target: Math.max(metrics.totalPengingatSent, 1),
+          ratio: metrics.totalPengingatSent > 0 ? 80 : 100,
+        },
+        {
+          title: 'Sudah Dibaca',
+          actual: metrics.totalPengingatRead,
+          target: Math.max(metrics.totalPengingatSent, 1),
+          ratio:
+            metrics.totalPengingatSent > 0
+              ? Math.round((metrics.totalPengingatRead / metrics.totalPengingatSent) * 100)
+              : 100,
+        },
+        {
+          title: 'Pengingat Akun Anda',
+          actual: metrics.myUnreadPengingat,
+          target: 0,
+          ratio: metrics.myUnreadPengingat === 0 ? 100 : 35,
+        },
+      ],
+    },
+    {
+      id: 'proses-aktivitas',
+      title: 'Proses Aktivitas',
+      cells: [
+        {
+          title: 'Jam Kerja Efektif',
+          actual: metrics.totalJam.toFixed(1),
+          target: metrics.targetJamBulan,
+          ratio: metrics.pctJam,
+        },
+        {
+          title: 'Jam Hari Ini',
+          actual: metrics.jamHariIni.toFixed(1),
+          target: '7.5',
+          ratio: Math.min(100, (metrics.jamHariIni / 7.5) * 100),
+        },
+        {
+          title: 'Sesi Pagi (<12.00)',
+          actual: metrics.pagiCount,
+          target: Math.max(metrics.totalEntri, 1),
+          ratio: metrics.totalEntri > 0 ? Math.round((metrics.pagiCount / metrics.totalEntri) * 100) : 0,
+        },
+        {
+          title: 'Sesi Siang (>=12.00)',
+          actual: metrics.siangCount,
+          target: Math.max(metrics.totalEntri, 1),
+          ratio: metrics.totalEntri > 0 ? Math.round((metrics.siangCount / metrics.totalEntri) * 100) : 0,
+        },
+        {
+          title: 'Bukti Tautan (%)',
+          actual: `${metrics.pctBukti}%`,
+          target: '100%',
+          ratio: metrics.pctBukti,
+        },
+        {
+          title: 'Kelengkapan Output',
+          actual: `${metrics.pctOutput}%`,
+          target: '100%',
+          ratio: metrics.pctOutput,
+        },
+      ],
+    },
+    {
+      id: 'disiplin-kehadiran',
+      title: 'Disiplin & Kehadiran',
+      cells: [
+        {
+          title: 'Hadir Kantor',
+          actual: metrics.hadirKantor,
+          target: Math.max(metrics.totalPresensi, metrics.targetHariKerja),
+          ratio: metrics.totalPresensi > 0 ? Math.round((metrics.hadirKantor / metrics.totalPresensi) * 100) : 0,
+        },
+        {
+          title: 'WFH / Dinas Luar',
+          actual: metrics.wfhDinas,
+          target: Math.max(metrics.wfhDinas, 1),
+          ratio: metrics.totalPresensi > 0 ? Math.round((metrics.wfhDinas / metrics.totalPresensi) * 100) : 0,
+        },
+        {
+          title: 'Izin / Sakit / Cuti',
+          actual: metrics.izinSakitCuti,
+          target: 0,
+          ratio: metrics.izinSakitCuti === 0 ? 100 : 50,
+        },
+        {
+          title: 'Tepat Waktu',
+          actual: metrics.tepatWaktuCount,
+          target: Math.max(metrics.hadirTotal, 1),
+          ratio: metrics.pctTepatWaktu,
+        },
+        {
+          title: 'Menit Terlambat',
+          actual: metrics.totalMenitTelat,
+          target: 0,
+          ratio: metrics.totalMenitTelat === 0 ? 100 : Math.max(15, 100 - metrics.totalMenitTelat),
+        },
+        {
+          title: 'Rasio Disiplin (%)',
+          actual: `${metrics.pctTepatWaktu}%`,
+          target: '100%',
+          ratio: metrics.pctTepatWaktu,
+        },
+      ],
+    },
+  ];
+
+  // Recent 5 activities for logged-in user
+  const recentKegiatan = useMemo(() => [...userKegiatan].slice(0, 5), [userKegiatan]);
 
   const handleSaveDraft = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +716,10 @@ export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
 
     try {
       setIsSubmittingDraft(true);
-      await onAddQuickDraft(draftTitle.trim(), draftContent.trim() || 'Draf pekerjaan harian tercatat.');
+      await onAddQuickDraft(
+        draftTitle.trim(),
+        draftContent.trim() || 'Draf pekerjaan harian tercatat.'
+      );
       setDraftTitle('');
       setDraftContent('');
       setDraftSuccessMsg('Draf kegiatan berhasil disimpan ke Jurnal Harian!');
@@ -95,352 +732,457 @@ export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 font-sans text-[#3c434a]">
-      
-      {/* WordPress Screen Options & Help Slideout Drawers */}
-      <div className="flex justify-end items-center gap-1 -mt-1 text-xs">
-        <button
-          type="button"
-          onClick={() => {
-            setShowScreenOptions(!showScreenOptions);
-            setShowHelp(false);
-          }}
-          className={`px-3 py-1 bg-white border border-[#c3c4c7] rounded-t text-[#2271b1] hover:text-[#135e96] font-normal flex items-center gap-1 transition ${
-            showScreenOptions ? 'border-b-white bg-slate-50' : ''
-          }`}
-        >
-          <span>Opsi Layar</span>
-          <ChevronDown className={`w-3 h-3 transition-transform ${showScreenOptions ? 'rotate-180' : ''}`} />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setShowHelp(!showHelp);
-            setShowScreenOptions(false);
-          }}
-          className={`px-3 py-1 bg-white border border-[#c3c4c7] rounded-t text-[#2271b1] hover:text-[#135e96] font-normal flex items-center gap-1 transition ${
-            showHelp ? 'border-b-white bg-slate-50' : ''
-          }`}
-        >
-          <span>Bantuan</span>
-          <ChevronDown className={`w-3 h-3 transition-transform ${showHelp ? 'rotate-180' : ''}`} />
-        </button>
-      </div>
-
-      {showScreenOptions && (
-        <div className="bg-white border border-[#c3c4c7] p-4 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 -mt-3 mb-3">
-          <h4 className="font-bold text-[#1d2327] mb-2">Kotak Tampilan Dasbor</h4>
-          <p className="text-slate-600 mb-2">Pilih elemen yang ingin ditampilkan pada halaman ringkasan kerja ini:</p>
-          <div className="flex flex-wrap gap-4 text-slate-700">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" defaultChecked className="rounded border-[#8c8f94] text-[#2271b1]" />
-              <span>Sekilas Info</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" defaultChecked className="rounded border-[#8c8f94] text-[#2271b1]" />
-              <span>Draf Cepat</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" defaultChecked className="rounded border-[#8c8f94] text-[#2271b1]" />
-              <span>Aktivitas & Riwayat Tugas</span>
-            </label>
-          </div>
-        </div>
-      )}
-
-      {showHelp && (
-        <div className="bg-white border border-[#c3c4c7] p-4 text-xs shadow-xs animate-in fade-in slide-in-from-top-1 -mt-3 mb-3">
-          <h4 className="font-bold text-[#1d2327] mb-1">Panduan Penggunaan E-Jurnal Kinerja</h4>
-          <p className="text-slate-600 leading-relaxed max-w-3xl">
-            Tampilan dasbor ini dirancang dengan antarmuka klasik WordPress Dashboard untuk mempermudah navigasi, pencatatan draf cepat aktivitas harian, serta monitoring paraf verifikasi atasan langsung secara real-time.
-          </p>
-        </div>
-      )}
-
-      {/* Main Page Title Header */}
-      <div className="flex items-center justify-between pb-1">
-        <h1 className="text-2xl font-normal text-[#1d2327] tracking-tight">
-          Dasbor
-        </h1>
-        <button
-          type="button"
-          onClick={onOpenJurnalModal}
-          className="px-3 py-1.5 bg-[#2271b1] hover:bg-[#135e96] active:bg-[#0a4b78] text-white text-xs font-semibold rounded shadow-xs transition flex items-center space-x-1 cursor-pointer"
-        >
-          <span>+ Tambah Kegiatan Baru</span>
-        </button>
-      </div>
-
-      {/* 2-Column Responsive WordPress Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        
-        {/* ================= LEFT COLUMN ================= */}
-        <div className="space-y-4">
-          
-          {/* Metabox 1: Sekilas Info (At a Glance) */}
-          <div className="bg-white border border-[#c3c4c7] shadow-2xs">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[#c3c4c7] bg-[#fafafa]">
-              <h2 className="text-sm font-semibold text-[#1d2327]">
-                Sekilas Info
-              </h2>
-              <button
-                type="button"
-                onClick={() => setCollapseAtGlance(!collapseAtGlance)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
-                title={collapseAtGlance ? 'Perluas' : 'Ciutkan'}
-              >
-                {collapseAtGlance ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </button>
+    <div
+      className={`${
+        isExpanded
+          ? 'fixed inset-0 z-50 overflow-y-auto p-3 sm:p-5'
+          : 'rounded-lg overflow-hidden'
+      } bg-[#030b1a] text-slate-100 border border-sky-500/30 shadow-[0_0_35px_rgba(2,132,199,0.2)] font-sans relative`}
+      style={{
+        backgroundImage:
+          'radial-gradient(ellipse at 50% 0%, rgba(14, 116, 184, 0.25) 0%, rgba(3, 11, 26, 0.96) 55%), linear-gradient(to right, rgba(14, 165, 233, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(14, 165, 233, 0.05) 1px, transparent 1px)',
+        backgroundSize: '100% 100%, 34px 34px, 34px 34px',
+      }}
+    >
+      <div className="p-2.5 sm:p-4 space-y-4 max-w-[1560px] mx-auto">
+        {/* ====================================================================
+            TOP CYBER COMMAND HEADER STRIP (Matches reference top bar)
+           ==================================================================== */}
+        <div className="relative flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2 pb-1 border-b border-sky-500/25">
+          {/* Left: Date + 2 Quick Nav Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <div className="px-3 py-1.5 bg-[#061836]/90 border border-sky-500/35 text-cyan-200 font-mono tabular-nums text-xs font-semibold tracking-wide shrink-0">
+              {todayIso}
             </div>
 
-            {!collapseAtGlance && (
-              <div className="p-3.5 space-y-3 text-xs text-[#3c434a]">
-                <div className="grid grid-cols-2 gap-y-2.5 gap-x-4 border-b border-[#f0f0f1] pb-3">
-                  <button
-                    onClick={() => onNavigateToTab('jurnal-harian')}
-                    className="flex items-center space-x-2 text-[#2271b1] hover:text-[#135e96] text-left cursor-pointer"
-                  >
-                    <Pin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                    <span><strong>{totalKegiatan}</strong> Kegiatan Jurnal</span>
-                  </button>
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('dashboard')}
+              className="px-4 py-1.5 bg-[#0a234c] border border-cyan-400/50 border-b-2 border-b-amber-400 text-white text-xs font-bold tracking-wide whitespace-nowrap shrink-0 cursor-pointer transition hover:bg-[#0e3066]"
+            >
+              Dasbor
+            </button>
 
-                  <button
-                    onClick={() => onNavigateToTab('rekapitulasi')}
-                    className="flex items-center space-x-2 text-[#2271b1] hover:text-[#135e96] text-left cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                    <span><strong>1</strong> Rekapitulasi</span>
-                  </button>
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('jurnal-harian')}
+              className="px-4 py-1.5 bg-[#061836]/80 border border-sky-500/30 text-sky-200 hover:text-white hover:border-cyan-400/60 text-xs font-semibold tracking-wide whitespace-nowrap shrink-0 cursor-pointer transition"
+            >
+              Jurnal Harian
+            </button>
+          </div>
 
-                  <div className="flex items-center space-x-2 text-slate-700">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span><strong className="text-emerald-700 font-bold">{approvedKegiatan}</strong> Disetujui Atasan</span>
+          {/* Center: Main System Banner */}
+          <div className="flex-1 flex justify-center">
+            <div className="w-full lg:max-w-md px-5 py-2 bg-gradient-to-b from-[#0f3e7a] via-[#0a2b57] to-[#051633] border border-cyan-400/45 shadow-[0_0_20px_rgba(34,211,238,0.2)] text-center rounded-b-lg">
+              <h1 className="text-sm sm:text-base font-bold text-white tracking-wide truncate">
+                Sistem Manajemen E-Jurnal Kinerja
+              </h1>
+              <p className="text-[10px] text-cyan-200/80 truncate">
+                {pengaturan.namaInstansi || 'E-Jurnal Kinerja Pegawai'}
+              </p>
+            </div>
+          </div>
+
+          {/* Right: 2 Quick Nav Tabs + Primary Action */}
+          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigateToTab(isSupervisorView ? 'monitoring' : 'rekapitulasi')}
+              className="px-3.5 py-1.5 bg-[#061836]/80 border border-sky-500/30 text-sky-200 hover:text-white hover:border-cyan-400/60 text-xs font-semibold tracking-wide whitespace-nowrap shrink-0 cursor-pointer transition"
+            >
+              {isSupervisorView ? 'Monitoring' : 'Rekapitulasi'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('pengingat')}
+              className="px-3.5 py-1.5 bg-[#061836]/80 border border-sky-500/30 text-sky-200 hover:text-white hover:border-cyan-400/60 text-xs font-semibold tracking-wide whitespace-nowrap shrink-0 cursor-pointer transition flex items-center gap-1.5"
+            >
+              <span>Pengingat</span>
+              {metrics.myUnreadPengingat > 0 && (
+                <span className="font-mono tabular-nums text-amber-300 font-bold">
+                  ({metrics.myUnreadPengingat})
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenJurnalModal}
+              className="px-3.5 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold tracking-wide whitespace-nowrap shrink-0 cursor-pointer transition flex items-center gap-1 shadow-[0_0_12px_rgba(56,189,248,0.45)]"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah Kegiatan</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ====================================================================
+            SECTION 1 BANNER: ANALISIS KINERJA MENDALAM
+           ==================================================================== */}
+        <div className="relative py-1.5 px-4 bg-gradient-to-r from-transparent via-[#0b3163]/90 to-transparent border-y border-cyan-500/35 flex items-center justify-center">
+          <div className="hidden sm:block absolute left-4 w-20 h-[2px] bg-gradient-to-r from-transparent to-cyan-400/70" />
+          <h2 className="text-sm sm:text-base font-semibold text-white tracking-wider">
+            Analisis Kinerja Mendalam
+          </h2>
+          <div className="hidden sm:block absolute right-4 w-20 h-[2px] bg-gradient-to-l from-transparent to-cyan-400/70" />
+        </div>
+
+        {/* ====================================================================
+            TOP 4 HOLOGRAPHIC ANALYSIS CARDS
+           ==================================================================== */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+          {topAnalysisCards.map((card) => (
+            <div
+              key={card.id}
+              onClick={() => onNavigateToTab(card.targetTab)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onNavigateToTab(card.targetTab);
+                }
+              }}
+              className="group bg-[#051226]/90 border border-sky-500/30 hover:border-cyan-400/70 transition-colors duration-200 flex flex-col justify-between cursor-pointer focus-visible:outline-2 focus-visible:outline-cyan-400"
+            >
+              {/* Card Title Bar */}
+              <div className="px-3 py-2 bg-gradient-to-r from-[#071c3d] via-[#0c2d61] to-[#071c3d] border-b border-sky-500/25 text-center">
+                <h3 className="text-xs sm:text-sm font-semibold text-sky-100 group-hover:text-cyan-300 transition-colors">
+                  {card.title}
+                </h3>
+              </div>
+
+              {/* Holographic Stage */}
+              <div className="px-3 pt-2 pb-1">{card.stage}</div>
+
+              {/* 3-Column Actual / Target Metric Strip */}
+              <div className="px-3 py-2 grid grid-cols-3 gap-2 border-t border-sky-500/20 bg-[#040e1f]/80">
+                {card.triples.map((metric) => (
+                  <div key={metric.label} className="min-w-0">
+                    <div className="text-[10px] text-slate-300 text-center truncate mb-1">
+                      {metric.label}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] gap-1">
+                      <span className="text-cyan-400">Aktual</span>
+                      <span className="text-white font-bold font-mono tabular-nums">
+                        {metric.actual}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] gap-1 mt-0.5">
+                      <span className="text-cyan-400/80">Target</span>
+                      <span className="text-sky-200 font-semibold font-mono tabular-nums">
+                        {metric.target}
+                      </span>
+                    </div>
+                    <ProgressBarMicro ratio={metric.ratio} />
                   </div>
+                ))}
+              </div>
 
-                  <div className="flex items-center space-x-2 text-slate-700">
-                    <MessageSquare className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span><strong className="text-amber-700 font-bold">{pendingKegiatan}</strong> Menunggu Paraf</span>
-                  </div>
-
-                  <div className="col-span-2 flex items-center space-x-2 text-slate-700 pt-1">
-                    <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Total Waktu Kerja Efektif: <strong className="font-mono text-slate-900">{totalJam.toFixed(1)} Jam</strong></span>
-                  </div>
-                </div>
-
-                <div className="text-[11px] text-slate-500 pt-0.5 leading-relaxed">
-                  E-Jurnal Kinerja 5.1.1 berjalan menggunakan tema resmi <span className="text-[#2271b1] font-medium">{pengaturan.badanDinas || 'Pemerintah Daerah'}</span> dengan Firebase Firestore Cloud Realtime.
+              {/* Card Bottom Completion Summary */}
+              <div className="px-3 py-2 border-t border-sky-500/20 bg-[#06152e]/85 text-center">
+                <div className="text-[10px] text-slate-300">{card.footerLabel}</div>
+                <div className="text-xs font-bold font-mono tabular-nums text-white mt-0.5">
+                  {card.footerValue}
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Metabox 2: Aktivitas & Riwayat Tugas Terbaru */}
-          <div className="bg-white border border-[#c3c4c7] shadow-2xs">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[#c3c4c7] bg-[#fafafa]">
-              <h2 className="text-sm font-semibold text-[#1d2327]">
-                Aktivitas & Riwayat Tugas Terbaru
-              </h2>
-              <button
-                type="button"
-                onClick={() => setCollapseActivity(!collapseActivity)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
-              >
-                {collapseActivity ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </button>
             </div>
+          ))}
+        </div>
 
-            {!collapseActivity && (
-              <div className="p-3.5 space-y-2 text-xs">
+        {/* ====================================================================
+            SECTION 2 BANNER: SASARAN STRATEGIS KINERJA
+           ==================================================================== */}
+        <div className="relative py-1.5 px-4 bg-gradient-to-r from-transparent via-[#0b3163]/90 to-transparent border-y border-cyan-500/35 flex items-center justify-center">
+          <div className="hidden sm:block absolute left-4 w-20 h-[2px] bg-gradient-to-r from-transparent to-cyan-400/70" />
+          <h2 className="text-sm sm:text-base font-semibold text-white tracking-wider">
+            Sasaran Strategis Kinerja
+          </h2>
+          <div className="hidden sm:block absolute right-4 w-20 h-[2px] bg-gradient-to-l from-transparent to-cyan-400/70" />
+        </div>
+
+        {/* ====================================================================
+            BOTTOM 4 KPI MATRIX PANELS (6 SUB-CELLS EACH = 24 LIVE KPI METRICS)
+           ==================================================================== */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+          {strategicPanels.map((panel) => (
+            <div
+              key={panel.id}
+              className="bg-[#051226]/90 border border-sky-500/30 flex flex-col"
+            >
+              {/* Panel Header */}
+              <div className="px-3 py-2 bg-gradient-to-r from-[#071c3d] via-[#0c2d61] to-[#071c3d] border-b border-sky-500/25 text-center">
+                <h3 className="text-xs sm:text-sm font-semibold text-sky-100">
+                  {panel.title}
+                </h3>
+              </div>
+
+              {/* 3x2 Sub-Cells Grid */}
+              <div className="p-2.5 grid grid-cols-3 gap-2">
+                {panel.cells.map((cell) => (
+                  <div
+                    key={cell.title}
+                    className="p-2 bg-[#040d1d]/85 border border-sky-500/15 flex flex-col justify-between min-w-0"
+                  >
+                    <div
+                      className="text-[10px] text-slate-200 font-medium text-center leading-tight min-h-[24px] flex items-center justify-center"
+                      title={cell.title}
+                    >
+                      <span className="line-clamp-2">{cell.title}</span>
+                    </div>
+
+                    <div className="mt-1.5 space-y-0.5 text-[10px]">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-cyan-400">Aktual</span>
+                        <span className="text-white font-bold font-mono tabular-nums">
+                          {cell.actual}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-cyan-400/80">Target</span>
+                        <span className="text-sky-200 font-semibold font-mono tabular-nums">
+                          {cell.target}
+                        </span>
+                      </div>
+                    </div>
+
+                    <ProgressBarMicro ratio={cell.ratio} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ====================================================================
+            BOTTOM INTERACTIVE WORKSPACE: AKTIVITAS TERBARU & DRAF CEPAT
+           ==================================================================== */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pt-1">
+          {/* Left: Recent Activities */}
+          <div className="bg-[#051226]/90 border border-sky-500/30 flex flex-col justify-between">
+            <div>
+              <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#071c3d] to-[#0a2754] border-b border-sky-500/25 flex items-center justify-between">
+                <h3 className="text-xs sm:text-sm font-semibold text-sky-100">
+                  Aktivitas &amp; Riwayat Tugas Terbaru Anda
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('jurnal-harian')}
+                  className="text-[11px] text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                >
+                  <span>Semua Jurnal</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="p-3.5">
                 {recentKegiatan.length === 0 ? (
-                  <div className="py-4 text-center text-slate-400">
-                    <Info className="w-5 h-5 mx-auto text-slate-300 mb-1" />
-                    <p>Belum ada catatan aktivitas di periode ini.</p>
+                  <div className="py-6 text-center text-xs text-slate-400 space-y-2">
+                    <p>Belum ada catatan aktivitas jurnal untuk akun Anda saat ini.</p>
+                    <button
+                      type="button"
+                      onClick={onOpenJurnalModal}
+                      className="px-3.5 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Catat Kegiatan Pertama</span>
+                    </button>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-sky-500/15">
                     {recentKegiatan.map((keg) => (
-                      <div key={keg.id} className="py-2 first:pt-0 last:pb-0 flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center space-x-1.5 text-[11px] text-slate-500">
-                            <span className="font-bold text-slate-700">{keg.hari}, {keg.tanggal}</span>
-                            <span>&bull;</span>
-                            <span className="font-mono">{keg.waktuMulai} - {keg.waktuSelesai}</span>
+                      <div
+                        key={keg.id}
+                        className="py-2.5 first:pt-0 last:pb-0 flex items-start justify-between gap-3 text-xs"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-cyan-300/90 font-mono tabular-nums">
+                            <span>
+                              {keg.hari}, {keg.tanggal}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                              {keg.waktuMulai} - {keg.waktuSelesai}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span
+                              className={
+                                keg.statusValidasi === 'Disetujui'
+                                  ? 'text-emerald-400 font-semibold'
+                                  : keg.statusValidasi === 'Ditolak'
+                                    ? 'text-rose-400 font-semibold'
+                                    : 'text-amber-300 font-semibold'
+                              }
+                            >
+                              {keg.statusValidasi}
+                            </span>
                           </div>
-                          <p className="font-semibold text-slate-900 truncate mt-0.5">
+                          <div className="font-semibold text-white truncate mt-0.5">
                             {keg.kegiatan}
-                          </p>
-                          <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
                             Output: {keg.outputHasil}
-                          </p>
+                          </div>
                         </div>
 
-                        <div className="shrink-0 flex flex-col items-end gap-1">
-                          {keg.statusValidasi === 'Disetujui' ? (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Disetujui
-                            </span>
-                          ) : keg.statusValidasi === 'Ditolak' ? (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                              Revisi
-                            </span>
-                          ) : (
-                            <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                              Menunggu
-                            </span>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteKegiatan(keg.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 transition cursor-pointer shrink-0"
+                          title="Hapus kegiatan ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
-
-                <div className="pt-2 border-t border-[#f0f0f1] flex items-center justify-between text-xs">
-                  <button
-                    type="button"
-                    onClick={() => onNavigateToTab('jurnal-harian')}
-                    className="text-[#2271b1] hover:text-[#135e96] font-semibold flex items-center space-x-1 cursor-pointer"
-                  >
-                    <span>Buka Semua Jurnal Harian</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="text-slate-400 text-[11px]">
-                    Total {totalKegiatan} baris tugas
-                  </span>
-                </div>
               </div>
-            )}
-          </div>
-
-        </div>
-
-        {/* ================= RIGHT COLUMN ================= */}
-        <div className="space-y-4">
-          
-          {/* Metabox 3: Draf Cepat (Quick Draft) */}
-          <div className="bg-white border border-[#c3c4c7] shadow-2xs">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[#c3c4c7] bg-[#fafafa]">
-              <h2 className="text-sm font-semibold text-[#1d2327]">
-                Draf Cepat
-              </h2>
-              <button
-                type="button"
-                onClick={() => setCollapseQuickDraft(!collapseQuickDraft)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
-              >
-                {collapseQuickDraft ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </button>
             </div>
 
-            {!collapseQuickDraft && (
-              <div className="p-3.5 text-xs text-[#3c434a]">
-                
+            {/* Quick Identity Footer inside card */}
+            <div className="px-3.5 py-2.5 bg-[#040d1d] border-t border-sky-500/20 text-[11px] text-slate-300 flex flex-wrap items-center justify-between gap-2">
+              <div className="truncate">
+                <strong className="text-white">{currentPegawai.nama}</strong>{' '}
+                <span className="font-mono text-cyan-300">({currentPegawai.nip})</span>
+              </div>
+              <div className="text-slate-400 truncate">
+                Atasan Penilai: <span className="text-slate-200">{pengaturan.namaAtasan || '-'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Quick Draft Form */}
+          <div className="bg-[#051226]/90 border border-sky-500/30 flex flex-col justify-between">
+            <div>
+              <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#071c3d] to-[#0a2754] border-b border-sky-500/25 flex items-center justify-between">
+                <h3 className="text-xs sm:text-sm font-semibold text-sky-100">
+                  Draf Cepat Kegiatan Harian
+                </h3>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToTab('cetak')}
+                    className="text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>Cetak</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3.5 space-y-3 text-xs">
                 {draftSuccessMsg && (
-                  <div className="mb-3 p-2 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded text-[11px] font-semibold flex items-center space-x-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <div className="p-2.5 bg-emerald-950/70 border border-emerald-500/50 text-emerald-200 rounded text-[11px] font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>{draftSuccessMsg}</span>
                   </div>
                 )}
 
                 <form onSubmit={handleSaveDraft} className="space-y-2.5">
                   <div>
-                    <label htmlFor="quick-draft-title" className="block text-slate-700 font-normal mb-1">
-                      Judul / Uraian Tugas
+                    <label
+                      htmlFor="cyber-draft-title"
+                      className="block text-[11px] font-semibold text-cyan-200 mb-1"
+                    >
+                      Judul / Uraian Tugas Hari Ini
                     </label>
                     <input
-                      id="quick-draft-title"
+                      id="cyber-draft-title"
                       type="text"
                       value={draftTitle}
                       onChange={(e) => setDraftTitle(e.target.value)}
                       placeholder="Contoh: Mengarsipkan surat masuk dan disposisi..."
-                      className="w-full px-2.5 py-1.5 bg-white border border-[#8c8f94] rounded text-xs focus:border-[#2271b1] focus:ring-1 focus:ring-[#2271b1] focus:outline-hidden"
                       required
+                      className="w-full px-3 py-2 bg-[#030b1a] border border-sky-500/35 rounded text-xs text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-hidden"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="quick-draft-content" className="block text-slate-700 font-normal mb-1">
-                      Apa yang Anda kerjakan hari ini?
+                    <label
+                      htmlFor="cyber-draft-content"
+                      className="block text-[11px] font-semibold text-cyan-200 mb-1"
+                    >
+                      Output / Hasil Pekerjaan
                     </label>
                     <textarea
-                      id="quick-draft-content"
-                      rows={4}
+                      id="cyber-draft-content"
+                      rows={3}
                       value={draftContent}
                       onChange={(e) => setDraftContent(e.target.value)}
                       placeholder="Rincian hasil / keluaran tugas yang telah diselesaikan..."
-                      className="w-full px-2.5 py-1.5 bg-white border border-[#8c8f94] rounded text-xs focus:border-[#2271b1] focus:ring-1 focus:ring-[#2271b1] focus:outline-hidden"
+                      className="w-full px-3 py-2 bg-[#030b1a] border border-sky-500/35 rounded text-xs text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-hidden"
                     />
                   </div>
 
-                  <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <button
                       type="submit"
                       disabled={isSubmittingDraft || !draftTitle.trim()}
-                      className="px-3.5 py-1.5 bg-[#2271b1] hover:bg-[#135e96] active:bg-[#0a4b78] text-white text-xs font-semibold rounded shadow-xs transition cursor-pointer disabled:opacity-50"
+                      className="px-4 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 transition"
                     >
-                      {isSubmittingDraft ? 'Menyimpan...' : 'Simpan Draf'}
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{isSubmittingDraft ? 'Menyimpan...' : 'Simpan Draf'}</span>
                     </button>
+
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="font-mono tabular-nums">
+                        Total Anda: {userKegiatan.length} Kegiatan
+                      </span>
+                    </div>
                   </div>
                 </form>
-
-                {/* Your Recent Drafts List */}
-                <div className="mt-4 pt-3 border-t border-[#f0f0f1]">
-                  <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-2">
-                    Draf Terbaru Anda
-                  </h4>
-
-                  {recentKegiatan.length === 0 ? (
-                    <p className="text-slate-400 italic text-[11px]">Belum ada draf tersimpan.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {recentKegiatan.slice(0, 3).map((draf) => (
-                        <div key={draf.id} className="group flex items-start justify-between gap-1 text-[11px]">
-                          <div>
-                            <button
-                              onClick={() => onNavigateToTab('jurnal-harian')}
-                              className="text-[#2271b1] hover:underline font-semibold text-left block truncate max-w-[230px]"
-                            >
-                              {draf.kegiatan}
-                            </button>
-                            <span className="text-slate-400 text-[10px]">
-                              {formatTanggalIndonesia(draf.tanggal)}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteKegiatan(draf.id)}
-                            className="text-slate-300 group-hover:text-red-600 transition p-0.5"
-                            title="Hapus baris ini"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Quick Info Box: Identitas & Atasan */}
-          <div className="bg-[#f6f7f7] border border-[#dcdcde] p-3 text-xs text-slate-600 space-y-1">
-            <div className="font-bold text-slate-800">
-              {currentPegawai.nama} <span className="font-mono font-normal">({currentPegawai.nip})</span>
-            </div>
-            <div className="text-[11px]">
-              Jabatan: {currentPegawai.jabatan} &bull; Unit: {currentPegawai.unitKerja}
-            </div>
-            <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-200">
-              Atasan Penilai: <strong>{pengaturan.namaAtasan || '-'}</strong> ({pengaturan.jabatanAtasan || '-'})
+            {/* Bottom Command Controls (Expand + Quick Links) */}
+            <div className="px-3.5 py-2.5 bg-[#040d1d] border-t border-sky-500/20 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div className="flex flex-wrap items-center gap-2 text-slate-300">
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('rekapitulasi')}
+                  className="hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <FileText className="w-3 h-3" />
+                  <span>Rekapitulasi</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+                <span aria-hidden="true" className="text-slate-600">|</span>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('pengingat')}
+                  className="hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <BellRing className="w-3 h-3" />
+                  <span>Pengingat WhatsApp</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="px-2.5 py-1 bg-[#081c3a] hover:bg-[#0e2d5c] border border-sky-500/40 text-cyan-200 rounded flex items-center gap-1.5 cursor-pointer transition"
+              >
+                {isExpanded ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5" />
+                    <span>Kecilkan</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Perluas</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 };

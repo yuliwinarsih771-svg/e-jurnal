@@ -1007,6 +1007,8 @@ export default function App() {
               currentPegawai={currentPegawai}
               allPegawai={pegawaiList}
               kegiatanList={kegiatanList}
+              presensiList={presensiList}
+              pengingatList={pengingatList}
               pengaturan={targetPengaturan}
               onNavigateToTab={(tab) => {
                 if (tab === 'cetak') {
