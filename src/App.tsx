@@ -1215,10 +1215,10 @@ export default function App() {
 
         </main>
 
-        {/* WordPress Admin Footer */}
+        {/* App Footer */}
         <footer className="py-2.5 px-3 sm:px-6 text-xs text-[#50575e] border-t border-[#dcdcde] bg-[#f0f0f1] flex flex-col sm:flex-row items-center justify-between gap-1.5 print:hidden">
           <p>
-            Terima kasih telah menggunakan <span className="text-[#2271b1] font-semibold">WordPress</span> &amp; <span className="font-semibold text-slate-700">{currentPengaturan.namaInstansi || 'E-Jurnal Kinerja'}</span>.
+            <span className="font-semibold text-slate-700">{currentPengaturan.namaInstansi || 'E-Jurnal Kinerja'}</span>
           </p>
           <div className="flex items-center space-x-3 text-[11px] text-[#8c8f94]">
             <span className="flex items-center space-x-1.5">
