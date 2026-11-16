@@ -21,8 +21,10 @@ import { LoginView } from './components/LoginView';
 import { ProfilPenggunaView } from './components/ProfilPenggunaView';
 import { TambahUserView } from './components/TambahUserView';
 import { DaftarPegawaiView } from './components/DaftarPegawaiView';
+import { PengingatJurnalView } from './components/PengingatJurnalView';
+import { BellRing } from 'lucide-react';
 
-import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord } from './types';
+import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord, PengingatJurnal } from './types';
 import { INITIAL_PENGATURAN, INITIAL_PEGAWAI } from './data/initialData';
 import confetti from 'canvas-confetti';
 import {
@@ -37,6 +39,8 @@ import {
   saveKegiatan,
   loadPresensi,
   savePresensi,
+  loadPengingat,
+  savePengingat,
   loadCurrentUserId,
   saveCurrentUserId,
   loadAuthUser,
@@ -56,6 +60,7 @@ import {
   subscribePresensiFirestore,
   subscribePengaturanFirestore,
   subscribeSystemMetaFirestore,
+  subscribePengingatFirestore,
   saveKegiatanToFirestore,
   deleteKegiatanFromFirestore,
   savePresensiToFirestore,
@@ -66,6 +71,9 @@ import {
   markPegawaiDeletedInFirestore,
   syncAllPegawaiToFirestore,
   savePegawaiToFirestore,
+  savePengingatToFirestore,
+  saveMultiplePengingatToFirestore,
+  deletePengingatFromFirestore,
 } from './services/firebaseDb';
 
 export default function App() {
@@ -79,6 +87,7 @@ export default function App() {
   });
   const [kegiatanList, setKegiatanList] = useState<KegiatanJurnal[]>(loadKegiatan);
   const [presensiList, setPresensiList] = useState<PresensiRecord[]>(loadPresensi);
+  const [pengingatList, setPengingatList] = useState<PengingatJurnal[]>(loadPengingat);
   const [isFirebaseSynced, setIsFirebaseSynced] = useState<boolean>(false);
 
   // Navigation & Filtering
@@ -92,6 +101,7 @@ export default function App() {
   // Modals
   const [isJurnalModalOpen, setIsJurnalModalOpen] = useState<boolean>(false);
   const [editingKegiatan, setEditingKegiatan] = useState<KegiatanJurnal | null>(null);
+  const [jurnalInitialTanggal, setJurnalInitialTanggal] = useState<string>('');
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [printModalMode, setPrintModalMode] = useState<'harian' | 'mingguan' | 'bulanan'>('bulanan');
   const [printModalTanggal, setPrintModalTanggal] = useState<string>('');
@@ -130,6 +140,7 @@ export default function App() {
       setPegawaiList((prev) => prev.filter((p) => !deletedSet.has(p.id)));
       setKegiatanList((prev) => prev.filter((k) => !deletedSet.has(k.pegawaiId)));
       setPresensiList((prev) => prev.filter((pr) => !deletedSet.has(pr.pegawaiId)));
+      setPengingatList((prev) => prev.filter((pg) => !deletedSet.has(pg.pegawaiId)));
     });
     const unsubPegawai = subscribePegawaiFirestore((livePegawai) => {
       const deletedSet = new Set(loadDeletedPegawaiIds());
@@ -146,6 +157,10 @@ export default function App() {
     const unsubPengaturan = subscribePengaturanFirestore((liveMap) => {
       if (Object.keys(liveMap).length > 0) setPengaturanMap(liveMap);
     });
+    const unsubPengingat = subscribePengingatFirestore((livePengingat) => {
+      const deletedSet = new Set(loadDeletedPegawaiIds());
+      setPengingatList(livePengingat.filter((pg) => !deletedSet.has(pg.pegawaiId)));
+    });
 
     return () => {
       isMounted = false;
@@ -154,6 +169,7 @@ export default function App() {
       unsubJurnal();
       unsubPresensi();
       unsubPengaturan();
+      unsubPengingat();
     };
   }, []);
 
@@ -175,6 +191,10 @@ export default function App() {
   }, [presensiList]);
 
   useEffect(() => {
+    savePengingat(pengingatList);
+  }, [pengingatList]);
+
+  useEffect(() => {
     saveCurrentUserId(currentUserId);
   }, [currentUserId]);
 
@@ -192,6 +212,19 @@ export default function App() {
   const pendingVerifikasiCount = useMemo(() => {
     return kegiatanList.filter((k) => k.statusValidasi === 'Menunggu').length;
   }, [kegiatanList]);
+
+  // Unread reminders belonging to the currently logged-in account
+  const myUnreadPengingat = useMemo(() => {
+    return pengingatList.filter((pg) => {
+      if (pg.pegawaiId !== currentPegawai.id || pg.status !== 'unread') return false;
+      const alreadyFilled = kegiatanList.some(
+        (k) => k.pegawaiId === currentPegawai.id && k.tanggal === pg.tanggalTarget
+      );
+      return !alreadyFilled;
+    });
+  }, [pengingatList, currentPegawai.id, kegiatanList]);
+
+  const unreadPengingatCount = myUnreadPengingat.length;
 
   // Target pegawai being viewed
   const targetPegawai = useMemo(() => {
@@ -262,6 +295,7 @@ export default function App() {
         'dashboard',
         'verifikasi',
         'monitoring',
+        'pengingat',
         'jurnal',
         'jurnal-harian',
         'jurnal-mingguan',
@@ -454,6 +488,28 @@ export default function App() {
       });
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
     }
+
+    // Automatically mark any pending reminders for this pegawai + tanggal as resolved
+    if (data.pegawaiId && data.tanggal) {
+      setPengingatList((prev) =>
+        prev.map((pg) => {
+          if (
+            pg.pegawaiId === data.pegawaiId &&
+            pg.tanggalTarget === data.tanggal &&
+            pg.status !== 'resolved'
+          ) {
+            const resolvedItem: PengingatJurnal = {
+              ...pg,
+              status: 'resolved',
+              readAt: pg.readAt || new Date().toISOString(),
+            };
+            savePengingatToFirestore(resolvedItem).catch(() => {});
+            return resolvedItem;
+          }
+          return pg;
+        })
+      );
+    }
   };
 
   const handleEditKegiatan = (keg: KegiatanJurnal) => {
@@ -572,6 +628,7 @@ export default function App() {
     });
     setKegiatanList((prev) => prev.filter((k) => k.pegawaiId !== pegId));
     setPresensiList((prev) => prev.filter((pr) => pr.pegawaiId !== pegId));
+    setPengingatList((prev) => prev.filter((pg) => pg.pegawaiId !== pegId));
     setPengaturanMap((prev) => {
       if (!prev[pegId]) return prev;
       const copy = { ...prev };
@@ -595,6 +652,7 @@ export default function App() {
     });
     setKegiatanList((prev) => prev.filter((k) => !idSet.has(k.pegawaiId)));
     setPresensiList((prev) => prev.filter((pr) => !idSet.has(pr.pegawaiId)));
+    setPengingatList((prev) => prev.filter((pg) => !idSet.has(pg.pegawaiId)));
     setPengaturanMap((prev) => {
       const copy = { ...prev };
       pegIds.forEach((id) => {
@@ -623,10 +681,87 @@ export default function App() {
     const retainedIds = new Set(updated.map((p) => p.id));
     setKegiatanList((prev) => prev.filter((k) => retainedIds.has(k.pegawaiId)));
     setPresensiList((prev) => prev.filter((pr) => retainedIds.has(pr.pegawaiId)));
+    setPengingatList((prev) => prev.filter((pg) => retainedIds.has(pg.pegawaiId)));
     setSelectedPegawaiId(updated[0]?.id || '');
     if (authUser && !retainedIds.has(authUser.id)) {
       handleLogout();
     }
+  };
+
+  // Pengingat Jurnal Handlers
+  const handleSendPengingat = async (targets: Pegawai[], tanggalTarget: string, pesan: string) => {
+    const nowIso = new Date().toISOString();
+    const baseTs = Date.now();
+    const newItems: PengingatJurnal[] = targets.map((peg, idx) => ({
+      id: `rem-${baseTs}-${idx}-${peg.id}`,
+      pegawaiId: peg.id,
+      pegawaiNama: peg.nama,
+      pegawaiNip: peg.nip,
+      tanggalTarget,
+      pesan,
+      pengirimId: currentPegawai.id,
+      pengirimNama: currentPegawai.nama,
+      pengirimJabatan: currentPegawai.jabatan,
+      status: 'unread',
+      createdAt: nowIso,
+    }));
+
+    setPengingatList((prev) => [...newItems, ...prev]);
+    await saveMultiplePengingatToFirestore(newItems);
+  };
+
+  const handleMarkPengingatRead = (pengingatId: string) => {
+    const nowIso = new Date().toISOString();
+    setPengingatList((prev) =>
+      prev.map((pg) => {
+        if (pg.id === pengingatId && pg.status === 'unread') {
+          const updated: PengingatJurnal = { ...pg, status: 'read', readAt: nowIso };
+          savePengingatToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return pg;
+      })
+    );
+  };
+
+  const handleMarkAllPengingatRead = () => {
+    const nowIso = new Date().toISOString();
+    const toSync: PengingatJurnal[] = [];
+    setPengingatList((prev) =>
+      prev.map((pg) => {
+        if (pg.pegawaiId === currentPegawai.id && pg.status === 'unread') {
+          const updated: PengingatJurnal = { ...pg, status: 'read', readAt: nowIso };
+          toSync.push(updated);
+          return updated;
+        }
+        return pg;
+      })
+    );
+    if (toSync.length > 0) {
+      saveMultiplePengingatToFirestore(toSync).catch(() => {});
+    }
+  };
+
+  const handleDeletePengingat = (pengingatId: string) => {
+    setPengingatList((prev) => prev.filter((pg) => pg.id !== pengingatId));
+    deletePengingatFromFirestore(pengingatId).catch((err) => {
+      console.warn('Firestore delete pengingat notice:', err);
+    });
+  };
+
+  const handleOpenJurnalForDate = (tanggalTarget: string) => {
+    if (tanggalTarget) {
+      const [y, m] = tanggalTarget.split('-');
+      if (y && m) {
+        setSelectedTahun(parseInt(y, 10));
+        setSelectedBulan(parseInt(m, 10));
+      }
+    }
+    setSelectedPegawaiId(currentPegawai.id);
+    setActiveTab('jurnal-harian');
+    setEditingKegiatan(null);
+    setJurnalInitialTanggal(tanggalTarget);
+    setIsJurnalModalOpen(true);
   };
 
   const handleAddPegawai = async (newPegawai: Pegawai) => {
@@ -737,6 +872,7 @@ export default function App() {
         allPegawai={pegawaiList}
         pengaturan={currentPengaturan}
         pendingVerifikasiCount={pendingVerifikasiCount}
+        unreadPengingatCount={unreadPengingatCount}
         onSelectPegawai={handleSelectPegawai}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenLaravelDocs={() => setIsLaravelDocsOpen(true)}
@@ -768,6 +904,7 @@ export default function App() {
           }
         }}
         pendingVerifikasiCount={pendingVerifikasiCount}
+        unreadPengingatCount={unreadPengingatCount}
         userRole={currentPegawai.role}
         isCollapsed={isWpSidebarCollapsed}
         onToggleCollapse={() => setIsWpSidebarCollapsed(!isWpSidebarCollapsed)}
@@ -784,6 +921,46 @@ export default function App() {
         isWpSidebarCollapsed ? 'md:pl-11' : 'md:pl-44'
       }`}>
         <main className="flex-1 w-full max-w-[1500px] p-2.5 sm:p-5 mx-auto">
+          {/* Active Unread Reminder Banner for Recipient Account */}
+          {unreadPengingatCount > 0 && activeTab !== 'pengingat' && (
+            <div className="mb-4 bg-amber-50 border border-amber-300 border-l-4 border-l-[#d63638] rounded-lg p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+              <div className="flex items-start space-x-2.5">
+                <div className="p-2 bg-rose-100 text-[#d63638] rounded-lg shrink-0">
+                  <BellRing className="w-4 h-4 animate-bounce" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-bold text-slate-900">
+                    Anda memiliki {unreadPengingatCount} Pengingat Pengisian Jurnal!
+                  </div>
+                  <p className="text-slate-700 mt-0.5 line-clamp-2">
+                    {myUnreadPengingat[0].pesan}
+                  </p>
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    Dari: <strong>{myUnreadPengingat[0].pengirimNama}</strong> &bull; Target Tanggal: <strong>{myUnreadPengingat[0].tanggalTarget}</strong>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleMarkPengingatRead(myUnreadPengingat[0].id);
+                    handleOpenJurnalForDate(myUnreadPengingat[0].tanggalTarget);
+                  }}
+                  className="px-3 py-1.5 bg-[#2271b1] hover:bg-[#135e96] text-white text-xs font-bold rounded shadow-xs cursor-pointer"
+                >
+                  Kerjakan Jurnal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('pengingat')}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-[#c3c4c7] text-xs font-semibold rounded cursor-pointer"
+                >
+                  Lihat Semua
+                </button>
+              </div>
+            </div>
+          )}
           {activeTab === 'dashboard' && (
             <WpDashboardView
               currentPegawai={currentPegawai}
@@ -948,6 +1125,20 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'pengingat' && (
+          <PengingatJurnalView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            kegiatanList={kegiatanList}
+            pengingatList={pengingatList}
+            onSendPengingat={handleSendPengingat}
+            onMarkAsRead={handleMarkPengingatRead}
+            onMarkAllAsRead={handleMarkAllPengingatRead}
+            onDeletePengingat={handleDeletePengingat}
+            onOpenJurnalForDate={handleOpenJurnalForDate}
+          />
+        )}
+
         {activeTab === 'daftar-pegawai' && (currentPegawai.role === 'superadmin' || currentPegawai.role === 'admin') && (
           <DaftarPegawaiView
             currentPegawai={currentPegawai}
@@ -1011,6 +1202,7 @@ export default function App() {
         onClose={() => {
           setIsJurnalModalOpen(false);
           setEditingKegiatan(null);
+          setJurnalInitialTanggal('');
         }}
         onSave={handleSaveKegiatan}
         onDelete={handleDeleteKegiatan}
@@ -1019,6 +1211,7 @@ export default function App() {
         selectedBulan={selectedBulan}
         selectedTahun={selectedTahun}
         nextNomorKegiatan={nextNomorKegiatan}
+        initialTanggal={jurnalInitialTanggal || undefined}
       />
 
       <PrintDocumentModal

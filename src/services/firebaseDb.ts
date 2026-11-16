@@ -12,7 +12,7 @@ import {
   arrayUnion,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Pegawai, KegiatanJurnal, PresensiRecord, PengaturanInstansi } from '../types';
+import { Pegawai, KegiatanJurnal, PresensiRecord, PengaturanInstansi, PengingatJurnal } from '../types';
 import { INITIAL_PEGAWAI, INITIAL_KEGIATAN, INITIAL_PRESENSI } from '../data/initialData';
 import {
   loadPengaturanMap,
@@ -26,6 +26,7 @@ export const COLLECTIONS = {
   JURNAL: 'jurnal_harian',
   PRESENSI: 'presensi',
   PENGATURAN: 'pengaturan',
+  PENGINGAT: 'pengingat_jurnal',
 };
 
 export const SYSTEM_META_DOC_ID = '_system_meta';
@@ -206,6 +207,15 @@ export async function deletePegawaiFromFirestore(id: string): Promise<void> {
     if (!subPresensiSnap.empty) {
       const batch = writeBatch(db);
       subPresensiSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    // 6. Delete all pengingat_jurnal records belonging to this pegawai
+    const pengingatQuery = query(collection(db, COLLECTIONS.PENGINGAT), where('pegawaiId', '==', id));
+    const pengingatSnap = await getDocs(pengingatQuery);
+    if (!pengingatSnap.empty) {
+      const batch = writeBatch(db);
+      pengingatSnap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
   } catch (error) {
@@ -439,6 +449,65 @@ export async function syncAllPengaturanMapToFirestore(map: Record<string, Pengat
     await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, COLLECTIONS.PENGATURAN);
+  }
+}
+
+// -------------------------------------------------------------
+// 4B. PENGINGAT JURNAL (Reminders sent to accounts)
+// -------------------------------------------------------------
+
+export function subscribePengingatFirestore(
+  onData: (list: PengingatJurnal[]) => void,
+  onError?: (err: any) => void
+): () => void {
+  const colRef = collection(db, COLLECTIONS.PENGINGAT);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const deletedSet = new Set(loadDeletedPegawaiIds());
+      const list = snapshot.docs
+        .map((d) => d.data() as PengingatJurnal)
+        .filter((pg) => pg && pg.id && !deletedSet.has(pg.pegawaiId))
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      onData(list);
+    },
+    (error) => {
+      if (onError) onError(error);
+      handleFirestoreError(error, OperationType.LIST, COLLECTIONS.PENGINGAT);
+    }
+  );
+}
+
+export async function savePengingatToFirestore(item: PengingatJurnal): Promise<void> {
+  const docPath = `${COLLECTIONS.PENGINGAT}/${item.id}`;
+  try {
+    const ref = doc(db, COLLECTIONS.PENGINGAT, item.id);
+    await setDoc(ref, sanitizeForFirestore(item), { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, docPath);
+  }
+}
+
+export async function saveMultiplePengingatToFirestore(items: PengingatJurnal[]): Promise<void> {
+  if (items.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    items.forEach((item) => {
+      const ref = doc(db, COLLECTIONS.PENGINGAT, item.id);
+      batch.set(ref, sanitizeForFirestore(item), { merge: true });
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, COLLECTIONS.PENGINGAT);
+  }
+}
+
+export async function deletePengingatFromFirestore(id: string): Promise<void> {
+  const docPath = `${COLLECTIONS.PENGINGAT}/${id}`;
+  try {
+    await deleteDoc(doc(db, COLLECTIONS.PENGINGAT, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, docPath);
   }
 }
 

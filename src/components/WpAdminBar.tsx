@@ -11,7 +11,8 @@ import {
   HelpCircle, 
   Database,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  Bell
 } from 'lucide-react';
 import { Pegawai, PengaturanInstansi, UserRole } from '../types';
 
@@ -20,6 +21,7 @@ interface WpAdminBarProps {
   allPegawai: Pegawai[];
   pengaturan: PengaturanInstansi;
   pendingVerifikasiCount: number;
+  unreadPengingatCount?: number;
   onSelectPegawai: (pegawai: Pegawai) => void;
   onOpenGuide: () => void;
   onOpenLaravelDocs: () => void;
@@ -36,6 +38,7 @@ export const WpAdminBar: React.FC<WpAdminBarProps> = ({
   allPegawai,
   pengaturan,
   pendingVerifikasiCount,
+  unreadPengingatCount = 0,
   onSelectPegawai,
   onOpenGuide,
   onOpenLaravelDocs,
@@ -159,6 +162,25 @@ export const WpAdminBar: React.FC<WpAdminBarProps> = ({
           }`}>
             {pendingVerifikasiCount}
           </span>
+        </button>
+
+        {/* Pengingat Jurnal Bell Counter */}
+        <button
+          type="button"
+          onClick={() => onNavigateToTab('pengingat')}
+          className="h-full px-2 flex items-center space-x-1 hover:bg-[#131619] hover:text-[#72aee6] transition cursor-pointer"
+          title={
+            unreadPengingatCount > 0
+              ? `${unreadPengingatCount} pengingat jurnal belum dibaca`
+              : 'Menu Pengingat Jurnal'
+          }
+        >
+          <Bell className={`w-3.5 h-3.5 ${unreadPengingatCount > 0 ? 'text-amber-400 animate-pulse' : 'text-[#8c8f94]'}`} />
+          {unreadPengingatCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0 rounded-full bg-[#d63638] text-white">
+              {unreadPengingatCount}
+            </span>
+          )}
         </button>
 
         {/* + New / + Baru Dropdown Button */}

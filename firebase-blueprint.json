@@ -85,6 +85,26 @@
         "toleransiKeterlambatanMenit": { "type": "number" }
       },
       "required": ["namaInstansi", "badanDinas", "alamat", "kotaPenetapan", "judulDokumen", "namaAtasan", "nipAtasan"]
+    },
+    "PengingatJurnal": {
+      "title": "PengingatJurnal",
+      "description": "Notifikasi pengingat pengisian jurnal harian yang dikirim ke akun pegawai yang belum mengerjakan jurnal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pegawaiId": { "type": "string" },
+        "pegawaiNama": { "type": "string" },
+        "pegawaiNip": { "type": "string" },
+        "tanggalTarget": { "type": "string" },
+        "pesan": { "type": "string" },
+        "pengirimId": { "type": "string" },
+        "pengirimNama": { "type": "string" },
+        "pengirimJabatan": { "type": "string" },
+        "status": { "type": "string", "enum": ["unread", "read", "resolved"] },
+        "createdAt": { "type": "string" },
+        "readAt": { "type": "string" }
+      },
+      "required": ["id", "pegawaiId", "pegawaiNama", "tanggalTarget", "pesan", "pengirimId", "pengirimNama", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -103,6 +123,10 @@
     "/pengaturan/{docId}": {
       "schema": "PengaturanInstansi",
       "description": "Pengaturan instansi dan profil cetak per akun atau templat baku"
+    },
+    "/pengingat_jurnal/{pengingatId}": {
+      "schema": "PengingatJurnal",
+      "description": "Pesan pengingat jurnal harian yang dikirim ke akun pegawai"
     }
   }
 }

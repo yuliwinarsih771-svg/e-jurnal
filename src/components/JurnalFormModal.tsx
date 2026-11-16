@@ -21,6 +21,7 @@ interface JurnalFormModalProps {
   selectedBulan?: number;
   selectedTahun?: number;
   nextNomorKegiatan: string;
+  initialTanggal?: string;
 }
 
 const HARI_MAP: Record<number, string> = {
@@ -76,6 +77,7 @@ export const JurnalFormModal: React.FC<JurnalFormModalProps> = ({
   selectedBulan,
   selectedTahun,
   nextNomorKegiatan,
+  initialTanggal,
 }) => {
   const [tanggal, setTanggal] = useState<string>('');
   const [hari, setHari] = useState<string>('Senin');
@@ -98,10 +100,10 @@ export const JurnalFormModal: React.FC<JurnalFormModalProps> = ({
       setOutputHasil(editingKegiatan.outputHasil);
       setTautanBukti(editingKegiatan.tautanBukti || '');
     } else {
-      // Determine default date aligned with the selected month and year
+      // Determine default date aligned with initialTanggal or selected month/year
       const m = (selectedBulan || 1).toString().padStart(2, '0');
       const y = selectedTahun || 2026;
-      const initialDate = `${y}-${m}-12`;
+      const initialDate = initialTanggal || `${y}-${m}-12`;
       setTanggal(initialDate);
       updateHariFromDate(initialDate);
       setNomorKegiatan(nextNomorKegiatan || '01');
@@ -114,7 +116,7 @@ export const JurnalFormModal: React.FC<JurnalFormModalProps> = ({
       setTautanBukti('');
     }
     setErrorMsg('');
-  }, [editingKegiatan, isOpen, nextNomorKegiatan, selectedBulan, selectedTahun]);
+  }, [editingKegiatan, isOpen, nextNomorKegiatan, selectedBulan, selectedTahun, initialTanggal]);
 
   const updateHariFromDate = (dateVal: string) => {
     if (!dateVal) return;

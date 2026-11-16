@@ -29,7 +29,8 @@ export type NavTab =
   | 'pengaturan' 
   | 'profil' 
   | 'tambah-user'
-  | 'daftar-pegawai';
+  | 'daftar-pegawai'
+  | 'pengingat';
 
 interface NavbarProps {
   activeTab: NavTab;

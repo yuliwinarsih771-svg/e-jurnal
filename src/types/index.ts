@@ -80,3 +80,20 @@ export interface FilterKinerja {
   pegawaiId: string;
   statusValidasi?: string;
 }
+
+export type StatusPengingat = 'unread' | 'read' | 'resolved';
+
+export interface PengingatJurnal {
+  id: string;
+  pegawaiId: string; // ID akun penerima yang belum mengerjakan jurnal
+  pegawaiNama: string;
+  pegawaiNip: string;
+  tanggalTarget: string; // YYYY-MM-DD
+  pesan: string;
+  pengirimId: string;
+  pengirimNama: string;
+  pengirimJabatan?: string;
+  status: StatusPengingat;
+  createdAt: string; // ISO string
+  readAt?: string;
+}

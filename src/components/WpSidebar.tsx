@@ -17,7 +17,8 @@ import {
   CalendarRange,
   CalendarDays,
   ShieldCheck,
-  Plus
+  Plus,
+  Bell
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -34,12 +35,14 @@ export type NavTab =
   | 'pengaturan' 
   | 'profil' 
   | 'tambah-user'
-  | 'daftar-pegawai';
+  | 'daftar-pegawai'
+  | 'pengingat';
 
 interface WpSidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   pendingVerifikasiCount: number;
+  unreadPengingatCount?: number;
   userRole: UserRole;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -52,6 +55,7 @@ export const WpSidebar: React.FC<WpSidebarProps> = ({
   activeTab,
   onTabChange,
   pendingVerifikasiCount,
+  unreadPengingatCount = 0,
   userRole,
   isCollapsed,
   onToggleCollapse,
@@ -233,6 +237,30 @@ export const WpSidebar: React.FC<WpSidebarProps> = ({
                 </button>
               </li>
             )}
+
+            {/* Pengingat Jurnal (Kirim untuk Atasan/Admin, Kotak Masuk untuk Pegawai) */}
+            <li>
+              <button
+                type="button"
+                onClick={() => handleSelectTab('pengingat')}
+                className={`w-full flex items-center justify-between px-3 py-2 text-left relative transition cursor-pointer group ${
+                  isTabActive('pengingat')
+                    ? 'bg-[#2271b1] text-white font-semibold after:content-[""] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:border-[5px] after:border-y-transparent after:border-l-transparent after:border-r-[#f0f0f1]'
+                    : 'hover:bg-[#191e23] hover:text-[#72aee6] text-[#c3c4c7]'
+                }`}
+                title="Pengingat Jurnal Pegawai"
+              >
+                <div className="flex items-center min-w-0">
+                  <Bell className={`w-4 h-4 shrink-0 ${isTabActive('pengingat') ? 'text-white' : 'text-[#8c8f94] group-hover:text-[#72aee6]'}`} />
+                  {!isCollapsed && <span className="ml-2.5 truncate">Pengingat Jurnal</span>}
+                </div>
+                {unreadPengingatCount > 0 && (
+                  <span className="px-1.5 py-0 rounded-full text-[9px] font-bold bg-[#d63638] text-white animate-pulse">
+                    {unreadPengingatCount}
+                  </span>
+                )}
+              </button>
+            </li>
 
             {/* 5. Plugins / Cetak Dokumen */}
             <li>

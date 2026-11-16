@@ -1,4 +1,4 @@
-import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord } from '../types';
+import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord, PengingatJurnal } from '../types';
 import { INITIAL_PENGATURAN, INITIAL_PEGAWAI, INITIAL_KEGIATAN, INITIAL_PRESENSI } from '../data/initialData';
 import { PRESET_LOGO_PEMDA } from './presetLogos';
 
@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   SEED_INITIALIZED: 'ejurnal_seed_initialized_v1',
   KEGIATAN: 'ejurnal_kegiatan_v1',
   PRESENSI: 'ejurnal_presensi_v1',
+  PENGINGAT: 'ejurnal_pengingat_v1',
   CURRENT_USER_ID: 'ejurnal_current_user_v1',
   AUTH_USER: 'ejurnal_auth_user_v1',
   HIDE_LOGIN_QUICK_LIST: 'ejurnal_hide_login_quick_list_v1',
@@ -278,6 +279,11 @@ export const deletePegawaiPermanentlyFromStorage = (pegawaiId: string): Pegawai[
     const updatedPresensi = currentPresensi.filter((pr) => pr.pegawaiId !== pegawaiId);
     localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(updatedPresensi));
 
+    // Clean up pengingat belonging to this employee
+    const currentPengingat = loadPengingat();
+    const updatedPengingat = currentPengingat.filter((pg) => pg.pegawaiId !== pegawaiId);
+    localStorage.setItem(STORAGE_KEYS.PENGINGAT, JSON.stringify(updatedPengingat));
+
     // Clean up from pengaturan map if exists
     const mapRaw = localStorage.getItem(STORAGE_KEYS.PENGATURAN_MAP);
     if (mapRaw) {
@@ -312,6 +318,10 @@ export const deleteMultiplePegawaiPermanentlyFromStorage = (pegawaiIds: string[]
     const currentPresensi = loadPresensi();
     const updatedPresensi = currentPresensi.filter((pr) => !idSet.has(pr.pegawaiId));
     localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(updatedPresensi));
+
+    const currentPengingat = loadPengingat();
+    const updatedPengingat = currentPengingat.filter((pg) => !idSet.has(pg.pegawaiId));
+    localStorage.setItem(STORAGE_KEYS.PENGINGAT, JSON.stringify(updatedPengingat));
 
     const mapRaw = localStorage.getItem(STORAGE_KEYS.PENGATURAN_MAP);
     if (mapRaw) {
@@ -415,6 +425,27 @@ export const savePresensi = (data: PresensiRecord[]): void => {
   localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(data));
 };
 
+export const loadPengingat = (): PengingatJurnal[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.PENGINGAT);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn('Failed reading pengingat from storage', e);
+  }
+  return [];
+};
+
+export const savePengingat = (data: PengingatJurnal[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.PENGINGAT, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed saving pengingat to storage', e);
+  }
+};
+
 export const loadCurrentUserId = (): string => {
   return localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'peg-01';
 };
@@ -447,6 +478,7 @@ export const resetAllData = (): void => {
   localStorage.removeItem(STORAGE_KEYS.PEGAWAI);
   localStorage.removeItem(STORAGE_KEYS.KEGIATAN);
   localStorage.removeItem(STORAGE_KEYS.PRESENSI);
+  localStorage.removeItem(STORAGE_KEYS.PENGINGAT);
   localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
   localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
   localStorage.removeItem(STORAGE_KEYS.HIDE_LOGIN_QUICK_LIST);
