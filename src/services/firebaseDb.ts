@@ -1,17 +1,25 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   deleteDoc,
   onSnapshot,
   writeBatch,
   query,
+  where,
+  arrayUnion,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Pegawai, KegiatanJurnal, PresensiRecord, PengaturanInstansi } from '../types';
-import { INITIAL_PEGAWAI, INITIAL_KEGIATAN, INITIAL_PRESENSI, INITIAL_PENGATURAN } from '../data/initialData';
-import { loadPengaturanMap } from '../utils/storage';
+import { INITIAL_PEGAWAI, INITIAL_KEGIATAN, INITIAL_PRESENSI } from '../data/initialData';
+import {
+  loadPengaturanMap,
+  loadDeletedPegawaiIds,
+  saveDeletedPegawaiIds,
+  setLocalSeedInitialized,
+} from '../utils/storage';
 
 export const COLLECTIONS = {
   PEGAWAI: 'pegawai',
@@ -19,6 +27,77 @@ export const COLLECTIONS = {
   PRESENSI: 'presensi',
   PENGATURAN: 'pengaturan',
 };
+
+export const SYSTEM_META_DOC_ID = '_system_meta';
+
+interface SystemMetaDoc {
+  initialized: boolean;
+  deletedPegawaiIds: string[];
+  updatedAt: string;
+}
+
+// -------------------------------------------------------------
+// 0. SYSTEM METADATA & PERMANENT DELETION TOMBSTONES
+// -------------------------------------------------------------
+
+export async function fetchSystemMetaFromFirestore(): Promise<SystemMetaDoc | null> {
+  const docPath = `${COLLECTIONS.PENGATURAN}/${SYSTEM_META_DOC_ID}`;
+  try {
+    const snap = await getDoc(doc(db, COLLECTIONS.PENGATURAN, SYSTEM_META_DOC_ID));
+    if (!snap.exists()) return null;
+    const data = snap.data() as Partial<SystemMetaDoc>;
+    return {
+      initialized: Boolean(data.initialized),
+      deletedPegawaiIds: Array.isArray(data.deletedPegawaiIds)
+        ? data.deletedPegawaiIds.filter((x) => typeof x === 'string')
+        : [],
+      updatedAt: data.updatedAt || '',
+    };
+  } catch (error) {
+    console.warn('Firestore system meta fetch notice:', error);
+    return null;
+  }
+}
+
+export async function markPegawaiDeletedInFirestore(pegIds: string[]): Promise<void> {
+  if (pegIds.length === 0) return;
+  const docPath = `${COLLECTIONS.PENGATURAN}/${SYSTEM_META_DOC_ID}`;
+  try {
+    const ref = doc(db, COLLECTIONS.PENGATURAN, SYSTEM_META_DOC_ID);
+    await setDoc(
+      ref,
+      {
+        initialized: true,
+        deletedPegawaiIds: arrayUnion(...pegIds),
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, docPath);
+  }
+}
+
+export function subscribeSystemMetaFirestore(
+  onDeletedIdsUpdate: (deletedIds: string[]) => void
+): () => void {
+  const ref = doc(db, COLLECTIONS.PENGATURAN, SYSTEM_META_DOC_ID);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as Partial<SystemMetaDoc>;
+        const ids = Array.isArray(data.deletedPegawaiIds)
+          ? data.deletedPegawaiIds.filter((x) => typeof x === 'string')
+          : [];
+        onDeletedIdsUpdate(ids);
+      }
+    },
+    (error) => {
+      console.warn('Firestore system meta listener notice:', error);
+    }
+  );
+}
 
 // -------------------------------------------------------------
 // 1. PEGAWAI (Accounts & Master Data)
@@ -28,7 +107,10 @@ export async function fetchPegawaiFromFirestore(): Promise<Pegawai[]> {
   try {
     const snap = await getDocs(collection(db, COLLECTIONS.PEGAWAI));
     if (snap.empty) return [];
-    return snap.docs.map((d) => d.data() as Pegawai);
+    const deletedSet = new Set(loadDeletedPegawaiIds());
+    return snap.docs
+      .map((d) => d.data() as Pegawai)
+      .filter((p) => p && p.id && !deletedSet.has(p.id));
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, COLLECTIONS.PEGAWAI);
   }
@@ -42,10 +124,11 @@ export function subscribePegawaiFirestore(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      if (!snapshot.empty) {
-        const list = snapshot.docs.map((d) => d.data() as Pegawai);
-        onData(list);
-      }
+      const deletedSet = new Set(loadDeletedPegawaiIds());
+      const list = snapshot.docs
+        .map((d) => d.data() as Pegawai)
+        .filter((p) => p && p.id && !deletedSet.has(p.id));
+      onData(list);
     },
     (error) => {
       if (onError) onError(error);
@@ -92,9 +175,53 @@ export async function savePegawaiToFirestore(pegawai: Pegawai): Promise<void> {
 export async function deletePegawaiFromFirestore(id: string): Promise<void> {
   const docPath = `${COLLECTIONS.PEGAWAI}/${id}`;
   try {
+    // 1. Record permanent deletion tombstone first so this account never returns on app update
+    await markPegawaiDeletedInFirestore([id]);
+
+    // 2. Delete main pegawai document
     await deleteDoc(doc(db, COLLECTIONS.PEGAWAI, id));
+
+    // 3. Delete per-account pengaturan document
+    await deleteDoc(doc(db, COLLECTIONS.PENGATURAN, id));
+
+    // 4. Delete all jurnal_harian records belonging to this pegawai
+    const jurnalQuery = query(collection(db, COLLECTIONS.JURNAL), where('pegawaiId', '==', id));
+    const jurnalSnap = await getDocs(jurnalQuery);
+    if (!jurnalSnap.empty) {
+      const batch = writeBatch(db);
+      jurnalSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    // 5. Delete all presensi records belonging to this pegawai (root & nested subcollection)
+    const presensiQuery = query(collection(db, COLLECTIONS.PRESENSI), where('pegawaiId', '==', id));
+    const presensiSnap = await getDocs(presensiQuery);
+    if (!presensiSnap.empty) {
+      const batch = writeBatch(db);
+      presensiSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    const subPresensiSnap = await getDocs(collection(db, COLLECTIONS.PEGAWAI, id, COLLECTIONS.PRESENSI));
+    if (!subPresensiSnap.empty) {
+      const batch = writeBatch(db);
+      subPresensiSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, docPath);
+  }
+}
+
+export async function deleteMultiplePegawaiFromFirestore(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  try {
+    await markPegawaiDeletedInFirestore(ids);
+    for (const id of ids) {
+      await deletePegawaiFromFirestore(id);
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, COLLECTIONS.PEGAWAI);
   }
 }
 
@@ -133,10 +260,8 @@ export function subscribeJurnalFirestore(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      if (!snapshot.empty) {
-        const list = snapshot.docs.map((d) => d.data() as KegiatanJurnal);
-        onData(list);
-      }
+      const list = snapshot.docs.map((d) => d.data() as KegiatanJurnal);
+      onData(list);
     },
     (error) => {
       if (onError) onError(error);
@@ -201,10 +326,8 @@ export function subscribePresensiFirestore(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      if (!snapshot.empty) {
-        const list = snapshot.docs.map((d) => d.data() as PresensiRecord);
-        onData(list);
-      }
+      const list = snapshot.docs.map((d) => d.data() as PresensiRecord);
+      onData(list);
     },
     (error) => {
       if (onError) onError(error);
@@ -259,7 +382,9 @@ export async function fetchPengaturanMapFromFirestore(): Promise<Record<string, 
     if (snap.empty) return {};
     const map: Record<string, PengaturanInstansi> = {};
     snap.docs.forEach((d) => {
-      map[d.id] = d.data() as PengaturanInstansi;
+      if (d.id !== SYSTEM_META_DOC_ID) {
+        map[d.id] = d.data() as PengaturanInstansi;
+      }
     });
     return map;
   } catch (error) {
@@ -275,11 +400,13 @@ export function subscribePengaturanFirestore(
   return onSnapshot(
     colRef,
     (snapshot) => {
-      if (!snapshot.empty) {
-        const map: Record<string, PengaturanInstansi> = {};
-        snapshot.docs.forEach((d) => {
+      const map: Record<string, PengaturanInstansi> = {};
+      snapshot.docs.forEach((d) => {
+        if (d.id !== SYSTEM_META_DOC_ID) {
           map[d.id] = d.data() as PengaturanInstansi;
-        });
+        }
+      });
+      if (Object.keys(map).length > 0) {
         onData(map);
       }
     },
@@ -304,8 +431,10 @@ export async function syncAllPengaturanMapToFirestore(map: Record<string, Pengat
   try {
     const batch = writeBatch(db);
     Object.entries(map).forEach(([key, val]) => {
-      const ref = doc(db, COLLECTIONS.PENGATURAN, key);
-      batch.set(ref, sanitizeForFirestore(val), { merge: true });
+      if (key !== SYSTEM_META_DOC_ID) {
+        const ref = doc(db, COLLECTIONS.PENGATURAN, key);
+        batch.set(ref, sanitizeForFirestore(val), { merge: true });
+      }
     });
     await batch.commit();
   } catch (error) {
@@ -314,7 +443,7 @@ export async function syncAllPengaturanMapToFirestore(map: Record<string, Pengat
 }
 
 // -------------------------------------------------------------
-// 5. AUTO-SEED TO FIRESTORE ON FIRST LOAD
+// 5. AUTO-SEED TO FIRESTORE ON FIRST LOAD ONLY (RESPECTS DELETIONS)
 // -------------------------------------------------------------
 
 export async function seedInitialDataIfFirestoreEmpty(): Promise<{
@@ -323,56 +452,112 @@ export async function seedInitialDataIfFirestoreEmpty(): Promise<{
   kegiatan: KegiatanJurnal[];
   presensi: PresensiRecord[];
   pengaturanMap: Record<string, PengaturanInstansi>;
+  deletedPegawaiIds: string[];
 }> {
   try {
-    // Check pegawai collection
+    // 1. Read system meta tombstone doc & local deleted IDs
+    const remoteMeta = await fetchSystemMetaFromFirestore();
+    const localDeleted = loadDeletedPegawaiIds();
+    const mergedDeleted = Array.from(
+      new Set([...localDeleted, ...(remoteMeta?.deletedPegawaiIds || [])])
+    );
+    const deletedSet = new Set(mergedDeleted);
+    saveDeletedPegawaiIds(mergedDeleted);
+
+    // 2. Check pegawai collection
     const pegawaiSnap = await getDocs(collection(db, COLLECTIONS.PEGAWAI));
+    const alreadyInitialized = Boolean(remoteMeta?.initialized) || !pegawaiSnap.empty;
+
     let currentPegawai: Pegawai[] = [];
 
-    if (pegawaiSnap.empty) {
-      console.log('Firestore: Seeding initial Pegawai to Firebase Firestore...');
-      await syncAllPegawaiToFirestore(INITIAL_PEGAWAI);
-      currentPegawai = INITIAL_PEGAWAI;
+    if (!alreadyInitialized) {
+      // Brand new database: seed initial pegawai excluding any locally deleted IDs
+      const initialToSeed = INITIAL_PEGAWAI.filter((p) => !deletedSet.has(p.id));
+      if (initialToSeed.length > 0) {
+        console.log('Firestore: First-time seeding initial Pegawai...');
+        await syncAllPegawaiToFirestore(initialToSeed);
+      }
+      currentPegawai = initialToSeed;
     } else {
-      currentPegawai = pegawaiSnap.docs.map((d) => d.data() as Pegawai);
+      // Already initialized: NEVER re-seed INITIAL_PEGAWAI!
+      // Filter out any deleted IDs and clean up stray docs if they exist
+      const docs = pegawaiSnap.docs.map((d) => d.data() as Pegawai);
+      currentPegawai = docs.filter((p) => p && p.id && !deletedSet.has(p.id));
+
+      const strayDeletedDocs = pegawaiSnap.docs.filter((d) => deletedSet.has(d.id));
+      if (strayDeletedDocs.length > 0) {
+        const batch = writeBatch(db);
+        strayDeletedDocs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     }
 
-    // Check jurnal collection
+    // Ensure _system_meta is saved & synced in Firestore
+    setLocalSeedInitialized(true);
+    if (!remoteMeta || !remoteMeta.initialized || mergedDeleted.length !== (remoteMeta.deletedPegawaiIds?.length || 0)) {
+      await setDoc(
+        doc(db, COLLECTIONS.PENGATURAN, SYSTEM_META_DOC_ID),
+        {
+          initialized: true,
+          deletedPegawaiIds: mergedDeleted,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    }
+
+    // 3. Check jurnal collection (only seed if brand new database)
     const jurnalSnap = await getDocs(collection(db, COLLECTIONS.JURNAL));
     let currentKegiatan: KegiatanJurnal[] = [];
 
-    if (jurnalSnap.empty) {
-      console.log('Firestore: Seeding initial Kegiatan Jurnal to Firebase Firestore...');
-      await syncAllKegiatanToFirestore(INITIAL_KEGIATAN);
-      currentKegiatan = INITIAL_KEGIATAN;
+    if (!alreadyInitialized && jurnalSnap.empty) {
+      const initialKegToSeed = INITIAL_KEGIATAN.filter((k) => !deletedSet.has(k.pegawaiId));
+      if (initialKegToSeed.length > 0) {
+        await syncAllKegiatanToFirestore(initialKegToSeed);
+      }
+      currentKegiatan = initialKegToSeed;
     } else {
-      currentKegiatan = jurnalSnap.docs.map((d) => d.data() as KegiatanJurnal);
+      currentKegiatan = jurnalSnap.docs
+        .map((d) => d.data() as KegiatanJurnal)
+        .filter((k) => !deletedSet.has(k.pegawaiId));
     }
 
-    // Check presensi collection
+    // 4. Check presensi collection (only seed if brand new database)
     const presensiSnap = await getDocs(collection(db, COLLECTIONS.PRESENSI));
     let currentPresensi: PresensiRecord[] = [];
 
-    if (presensiSnap.empty) {
-      console.log('Firestore: Seeding initial Presensi to Firebase Firestore...');
-      await syncAllPresensiToFirestore(INITIAL_PRESENSI);
-      currentPresensi = INITIAL_PRESENSI;
+    if (!alreadyInitialized && presensiSnap.empty) {
+      const initialPresToSeed = INITIAL_PRESENSI.filter((pr) => !deletedSet.has(pr.pegawaiId));
+      if (initialPresToSeed.length > 0) {
+        await syncAllPresensiToFirestore(initialPresToSeed);
+      }
+      currentPresensi = initialPresToSeed;
     } else {
-      currentPresensi = presensiSnap.docs.map((d) => d.data() as PresensiRecord);
+      currentPresensi = presensiSnap.docs
+        .map((d) => d.data() as PresensiRecord)
+        .filter((pr) => !deletedSet.has(pr.pegawaiId));
     }
 
-    // Check pengaturan collection
+    // 5. Check pengaturan collection
     const pengaturanSnap = await getDocs(collection(db, COLLECTIONS.PENGATURAN));
     let currentPengaturanMap: Record<string, PengaturanInstansi> = {};
+    const pengaturanDocs = pengaturanSnap.docs.filter((d) => d.id !== SYSTEM_META_DOC_ID);
 
-    if (pengaturanSnap.empty) {
-      console.log('Firestore: Seeding initial Pengaturan to Firebase Firestore...');
+    if (pengaturanDocs.length === 0) {
       const defaultMap = loadPengaturanMap();
-      await syncAllPengaturanMapToFirestore(defaultMap);
-      currentPengaturanMap = defaultMap;
+      const filteredMap: Record<string, PengaturanInstansi> = {};
+      Object.entries(defaultMap).forEach(([k, v]) => {
+        if (!deletedSet.has(k)) {
+          filteredMap[k] = v;
+        }
+      });
+      await syncAllPengaturanMapToFirestore(filteredMap);
+      currentPengaturanMap = filteredMap;
     } else {
-      pengaturanSnap.docs.forEach((d) => {
-        currentPengaturanMap[d.id] = d.data() as PengaturanInstansi;
+      pengaturanDocs.forEach((d) => {
+        if (!deletedSet.has(d.id)) {
+          currentPengaturanMap[d.id] = d.data() as PengaturanInstansi;
+        }
       });
     }
 
@@ -382,15 +567,19 @@ export async function seedInitialDataIfFirestoreEmpty(): Promise<{
       kegiatan: currentKegiatan,
       presensi: currentPresensi,
       pengaturanMap: currentPengaturanMap,
+      deletedPegawaiIds: mergedDeleted,
     };
   } catch (error) {
     console.warn('Firestore seeding check encountered an issue (will use local fallback):', error);
+    const localDeleted = loadDeletedPegawaiIds();
+    const deletedSet = new Set(localDeleted);
     return {
       seeded: false,
-      pegawai: INITIAL_PEGAWAI,
-      kegiatan: INITIAL_KEGIATAN,
-      presensi: INITIAL_PRESENSI,
+      pegawai: INITIAL_PEGAWAI.filter((p) => !deletedSet.has(p.id)),
+      kegiatan: INITIAL_KEGIATAN.filter((k) => !deletedSet.has(k.pegawaiId)),
+      presensi: INITIAL_PRESENSI.filter((pr) => !deletedSet.has(pr.pegawaiId)),
       pengaturanMap: loadPengaturanMap(),
+      deletedPegawaiIds: localDeleted,
     };
   }
 }

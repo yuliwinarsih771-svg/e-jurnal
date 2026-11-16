@@ -33,7 +33,8 @@ export type NavTab =
   | 'cetak' 
   | 'pengaturan' 
   | 'profil' 
-  | 'tambah-user';
+  | 'tambah-user'
+  | 'daftar-pegawai';
 
 interface WpSidebarProps {
   activeTab: NavTab;
@@ -270,6 +271,25 @@ export const WpSidebar: React.FC<WpSidebarProps> = ({
                 )}
               </button>
             </li>
+
+            {/* Khusus Super Admin & Admin: Nama-Nama Pegawai (Edit & Hapus Permanen) */}
+            {(userRole === 'superadmin' || userRole === 'admin') && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => handleSelectTab('daftar-pegawai')}
+                  className={`w-full flex items-center px-3 py-2 text-left relative transition cursor-pointer group ${
+                    isTabActive('daftar-pegawai')
+                      ? 'bg-[#2271b1] text-white font-semibold after:content-[""] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:border-[5px] after:border-y-transparent after:border-l-transparent after:border-r-[#f0f0f1]'
+                      : 'hover:bg-[#191e23] hover:text-[#72aee6] text-[#c3c4c7]'
+                  }`}
+                  title="Daftar, Edit & Hapus Permanen Pegawai"
+                >
+                  <UserCheck className={`w-4 h-4 shrink-0 ${isTabActive('daftar-pegawai') ? 'text-white' : 'text-[#8c8f94] group-hover:text-[#72aee6]'}`} />
+                  {!isCollapsed && <span className="ml-2.5 truncate">Nama-Nama Pegawai</span>}
+                </button>
+              </li>
+            )}
 
             {/* Khusus Super Admin: Tambah Akun */}
             {userRole === 'superadmin' && (

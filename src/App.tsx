@@ -20,9 +20,10 @@ import { HelpGuideModal } from './components/HelpGuideModal';
 import { LoginView } from './components/LoginView';
 import { ProfilPenggunaView } from './components/ProfilPenggunaView';
 import { TambahUserView } from './components/TambahUserView';
+import { DaftarPegawaiView } from './components/DaftarPegawaiView';
 
 import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord } from './types';
-import { INITIAL_PENGATURAN } from './data/initialData';
+import { INITIAL_PENGATURAN, INITIAL_PEGAWAI } from './data/initialData';
 import confetti from 'canvas-confetti';
 import {
   loadPengaturan,
@@ -42,7 +43,11 @@ import {
   saveAuthUser,
   resetAllData,
   deletePegawaiPermanentlyFromStorage,
+  deleteMultiplePegawaiPermanentlyFromStorage,
   purgeAllDemoAccountsFromStorage,
+  saveDeletedPegawaiIds,
+  addDeletedPegawaiIds,
+  loadDeletedPegawaiIds,
 } from './utils/storage';
 import {
   seedInitialDataIfFirestoreEmpty,
@@ -50,12 +55,15 @@ import {
   subscribeJurnalFirestore,
   subscribePresensiFirestore,
   subscribePengaturanFirestore,
+  subscribeSystemMetaFirestore,
   saveKegiatanToFirestore,
   deleteKegiatanFromFirestore,
   savePresensiToFirestore,
   savePengaturanToFirestore,
   syncAllPengaturanMapToFirestore,
   deletePegawaiFromFirestore,
+  deleteMultiplePegawaiFromFirestore,
+  markPegawaiDeletedInFirestore,
   syncAllPegawaiToFirestore,
   savePegawaiToFirestore,
 } from './services/firebaseDb';
@@ -98,8 +106,11 @@ export default function App() {
     seedInitialDataIfFirestoreEmpty()
       .then((res) => {
         if (!isMounted) return;
+        if (res.deletedPegawaiIds && res.deletedPegawaiIds.length > 0) {
+          saveDeletedPegawaiIds(res.deletedPegawaiIds);
+        }
         if (res.seeded) {
-          if (res.pegawai && res.pegawai.length > 0) setPegawaiList(res.pegawai);
+          setPegawaiList(res.pegawai);
           if (res.kegiatan) setKegiatanList(res.kegiatan);
           if (res.presensi) setPresensiList(res.presensi);
           if (res.pengaturanMap && Object.keys(res.pengaturanMap).length > 0) {
@@ -113,14 +124,24 @@ export default function App() {
       });
 
     // Realtime subscriptions
+    const unsubSystemMeta = subscribeSystemMetaFirestore((remoteDeletedIds) => {
+      const merged = addDeletedPegawaiIds(remoteDeletedIds);
+      const deletedSet = new Set(merged);
+      setPegawaiList((prev) => prev.filter((p) => !deletedSet.has(p.id)));
+      setKegiatanList((prev) => prev.filter((k) => !deletedSet.has(k.pegawaiId)));
+      setPresensiList((prev) => prev.filter((pr) => !deletedSet.has(pr.pegawaiId)));
+    });
     const unsubPegawai = subscribePegawaiFirestore((livePegawai) => {
-      if (livePegawai.length > 0) setPegawaiList(livePegawai);
+      const deletedSet = new Set(loadDeletedPegawaiIds());
+      setPegawaiList(livePegawai.filter((p) => !deletedSet.has(p.id)));
     });
     const unsubJurnal = subscribeJurnalFirestore((liveJurnal) => {
-      setKegiatanList(liveJurnal);
+      const deletedSet = new Set(loadDeletedPegawaiIds());
+      setKegiatanList(liveJurnal.filter((k) => !deletedSet.has(k.pegawaiId)));
     });
     const unsubPresensi = subscribePresensiFirestore((livePresensi) => {
-      setPresensiList(livePresensi);
+      const deletedSet = new Set(loadDeletedPegawaiIds());
+      setPresensiList(livePresensi.filter((pr) => !deletedSet.has(pr.pegawaiId)));
     });
     const unsubPengaturan = subscribePengaturanFirestore((liveMap) => {
       if (Object.keys(liveMap).length > 0) setPengaturanMap(liveMap);
@@ -128,6 +149,7 @@ export default function App() {
 
     return () => {
       isMounted = false;
+      unsubSystemMeta();
       unsubPegawai();
       unsubJurnal();
       unsubPresensi();
@@ -158,8 +180,13 @@ export default function App() {
 
   // Current active user
   const currentPegawai = useMemo(() => {
-    return pegawaiList.find((p) => p.id === currentUserId) || pegawaiList[0];
-  }, [pegawaiList, currentUserId]);
+    return (
+      pegawaiList.find((p) => p.id === currentUserId) ||
+      pegawaiList[0] ||
+      authUser ||
+      INITIAL_PEGAWAI[INITIAL_PEGAWAI.length - 1]
+    );
+  }, [pegawaiList, currentUserId, authUser]);
 
   // Pending count for superior verification badge
   const pendingVerifikasiCount = useMemo(() => {
@@ -251,8 +278,17 @@ export default function App() {
       if (activeTab === 'verifikasi' || activeTab === 'pengaturan') {
         setActiveTab('monitoring');
       }
+    } else if (currentPegawai.role === 'admin') {
+      if (activeTab === 'verifikasi' || activeTab === 'monitoring' || activeTab === 'tambah-user') {
+        setActiveTab('jurnal-harian');
+      }
     } else {
-      if (activeTab === 'verifikasi' || activeTab === 'monitoring') {
+      if (
+        activeTab === 'verifikasi' ||
+        activeTab === 'monitoring' ||
+        activeTab === 'daftar-pegawai' ||
+        activeTab === 'tambah-user'
+      ) {
         setActiveTab('jurnal-harian');
       }
     }
@@ -535,22 +571,58 @@ export default function App() {
       console.warn('Firestore delete employee notice:', err);
     });
     setKegiatanList((prev) => prev.filter((k) => k.pegawaiId !== pegId));
+    setPresensiList((prev) => prev.filter((pr) => pr.pegawaiId !== pegId));
+    setPengaturanMap((prev) => {
+      if (!prev[pegId]) return prev;
+      const copy = { ...prev };
+      delete copy[pegId];
+      return copy;
+    });
     if (selectedPegawaiId === pegId) {
-      setSelectedPegawaiId(updated[0]?.id || '');
+      setSelectedPegawaiId(updated[0]?.id || currentPegawai.id);
     }
     if (authUser && authUser.id === pegId) {
       handleLogout();
     }
   };
 
+  const handleBatchDeletePegawaiPermanently = (pegIds: string[]) => {
+    const idSet = new Set(pegIds);
+    const updated = deleteMultiplePegawaiPermanentlyFromStorage(pegIds);
+    setPegawaiList(updated);
+    deleteMultiplePegawaiFromFirestore(pegIds).catch((err) => {
+      console.warn('Firestore batch delete employee notice:', err);
+    });
+    setKegiatanList((prev) => prev.filter((k) => !idSet.has(k.pegawaiId)));
+    setPresensiList((prev) => prev.filter((pr) => !idSet.has(pr.pegawaiId)));
+    setPengaturanMap((prev) => {
+      const copy = { ...prev };
+      pegIds.forEach((id) => {
+        if (copy[id]) delete copy[id];
+      });
+      return copy;
+    });
+    if (idSet.has(selectedPegawaiId)) {
+      setSelectedPegawaiId(updated[0]?.id || currentPegawai.id);
+    }
+    if (authUser && idSet.has(authUser.id)) {
+      handleLogout();
+    }
+  };
+
   const handlePurgeDemoAccounts = () => {
+    const removedIds = pegawaiList.filter((p) => p.role !== 'superadmin').map((p) => p.id);
     const updated = purgeAllDemoAccountsFromStorage();
     setPegawaiList(updated);
-    syncAllPegawaiToFirestore(updated).catch((err) => {
-      console.warn('Firestore purge sync notice:', err);
-    });
+    if (removedIds.length > 0) {
+      markPegawaiDeletedInFirestore(removedIds).catch(() => {});
+      deleteMultiplePegawaiFromFirestore(removedIds).catch((err) => {
+        console.warn('Firestore purge sync notice:', err);
+      });
+    }
     const retainedIds = new Set(updated.map((p) => p.id));
     setKegiatanList((prev) => prev.filter((k) => retainedIds.has(k.pegawaiId)));
+    setPresensiList((prev) => prev.filter((pr) => retainedIds.has(pr.pegawaiId)));
     setSelectedPegawaiId(updated[0]?.id || '');
     if (authUser && !retainedIds.has(authUser.id)) {
       handleLogout();
@@ -876,11 +948,22 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'daftar-pegawai' && (currentPegawai.role === 'superadmin' || currentPegawai.role === 'admin') && (
+          <DaftarPegawaiView
+            currentPegawai={currentPegawai}
+            allPegawai={pegawaiList}
+            onUpdatePegawai={handleUpdatePegawaiProfile}
+            onDeletePegawaiPermanently={handleDeletePegawaiPermanently}
+            onBatchDeletePegawaiPermanently={handleBatchDeletePegawaiPermanently}
+            onAddPegawai={handleAddPegawai}
+          />
+        )}
+
         {activeTab === 'tambah-user' && currentPegawai.role === 'superadmin' && (
           <TambahUserView
             allPegawai={pegawaiList}
             onAddPegawai={handleAddPegawai}
-            onNavigateToAccounts={() => setActiveTab('profil')}
+            onNavigateToAccounts={() => setActiveTab('daftar-pegawai')}
           />
         )}
 

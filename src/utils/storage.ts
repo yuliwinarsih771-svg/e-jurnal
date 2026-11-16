@@ -6,11 +6,65 @@ const STORAGE_KEYS = {
   PENGATURAN: 'ejurnal_pengaturan_v1',
   PENGATURAN_MAP: 'ejurnal_pengaturan_map_v2',
   PEGAWAI: 'ejurnal_pegawai_v1',
+  DELETED_PEGAWAI_IDS: 'ejurnal_deleted_pegawai_ids_v1',
+  SEED_INITIALIZED: 'ejurnal_seed_initialized_v1',
   KEGIATAN: 'ejurnal_kegiatan_v1',
   PRESENSI: 'ejurnal_presensi_v1',
   CURRENT_USER_ID: 'ejurnal_current_user_v1',
   AUTH_USER: 'ejurnal_auth_user_v1',
   HIDE_LOGIN_QUICK_LIST: 'ejurnal_hide_login_quick_list_v1',
+};
+
+export const loadDeletedPegawaiIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_PEGAWAI_IDS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === 'string');
+    }
+  } catch (e) {
+    console.warn('Failed reading deleted pegawai ids from storage', e);
+  }
+  return [];
+};
+
+export const saveDeletedPegawaiIds = (ids: string[]): void => {
+  try {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    localStorage.setItem(STORAGE_KEYS.DELETED_PEGAWAI_IDS, JSON.stringify(unique));
+  } catch (e) {
+    console.warn('Failed saving deleted pegawai ids', e);
+  }
+};
+
+export const addDeletedPegawaiIds = (idsToAdd: string[]): string[] => {
+  const existing = loadDeletedPegawaiIds();
+  const merged = Array.from(new Set([...existing, ...idsToAdd.filter(Boolean)]));
+  saveDeletedPegawaiIds(merged);
+  return merged;
+};
+
+export const removeDeletedPegawaiId = (idToRemove: string): string[] => {
+  const existing = loadDeletedPegawaiIds();
+  const filtered = existing.filter((id) => id !== idToRemove);
+  saveDeletedPegawaiIds(filtered);
+  return filtered;
+};
+
+export const isLocalSeedInitialized = (): boolean => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.SEED_INITIALIZED) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const setLocalSeedInitialized = (val: boolean): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SEED_INITIALIZED, val ? 'true' : 'false');
+  } catch (e) {
+    console.warn('Failed saving seed initialized flag', e);
+  }
 };
 
 export const loadPengaturan = (): PengaturanInstansi => {
@@ -129,14 +183,24 @@ export const saveHideLoginQuickList = (hidden: boolean): void => {
 };
 
 export const loadPegawai = (): Pegawai[] => {
+  const deletedSet = new Set(loadDeletedPegawaiIds());
+
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PEGAWAI);
     if (raw !== null) {
       const stored: Pegawai[] = JSON.parse(raw);
       if (Array.isArray(stored)) {
-        // Normalize stored pegawai credentials without restoring deleted ones
+        // Filter out permanently deleted employees and normalize credentials
         let modified = false;
-        const normalized = stored.map((p) => {
+        const filtered = stored.filter((p) => {
+          if (deletedSet.has(p.id)) {
+            modified = true;
+            return false;
+          }
+          return true;
+        });
+
+        const normalized = filtered.map((p) => {
           let changed = false;
           let password = p.password;
           if (!password) {
@@ -176,13 +240,19 @@ export const loadPegawai = (): Pegawai[] => {
     console.warn('Failed reading pegawai from storage', e);
   }
 
-  // Only on initial setup if key was never created
+  // Only seed initial pegawai on first setup if not previously initialized
+  if (isLocalSeedInitialized()) {
+    return [];
+  }
+
+  const initialFiltered = INITIAL_PEGAWAI.filter((p) => !deletedSet.has(p.id));
   try {
-    localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(INITIAL_PEGAWAI));
+    localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(initialFiltered));
+    setLocalSeedInitialized(true);
   } catch (e) {
     console.warn('Failed saving initial pegawai', e);
   }
-  return INITIAL_PEGAWAI;
+  return initialFiltered;
 };
 
 export const savePegawai = (data: Pegawai[]): void => {
@@ -191,6 +261,9 @@ export const savePegawai = (data: Pegawai[]): void => {
 
 export const deletePegawaiPermanentlyFromStorage = (pegawaiId: string): Pegawai[] => {
   try {
+    addDeletedPegawaiIds([pegawaiId]);
+    setLocalSeedInitialized(true);
+
     const currentList = loadPegawai();
     const updatedList = currentList.filter((p) => p.id !== pegawaiId);
     localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(updatedList));
@@ -199,6 +272,11 @@ export const deletePegawaiPermanentlyFromStorage = (pegawaiId: string): Pegawai[
     const currentKegiatan = loadKegiatan();
     const updatedKegiatan = currentKegiatan.filter((k) => k.pegawaiId !== pegawaiId);
     localStorage.setItem(STORAGE_KEYS.KEGIATAN, JSON.stringify(updatedKegiatan));
+
+    // Clean up presensi belonging to this employee
+    const currentPresensi = loadPresensi();
+    const updatedPresensi = currentPresensi.filter((pr) => pr.pegawaiId !== pegawaiId);
+    localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(updatedPresensi));
 
     // Clean up from pengaturan map if exists
     const mapRaw = localStorage.getItem(STORAGE_KEYS.PENGATURAN_MAP);
@@ -217,9 +295,51 @@ export const deletePegawaiPermanentlyFromStorage = (pegawaiId: string): Pegawai[
   }
 };
 
+export const deleteMultiplePegawaiPermanentlyFromStorage = (pegawaiIds: string[]): Pegawai[] => {
+  try {
+    const idSet = new Set(pegawaiIds);
+    addDeletedPegawaiIds(pegawaiIds);
+    setLocalSeedInitialized(true);
+
+    const currentList = loadPegawai();
+    const updatedList = currentList.filter((p) => !idSet.has(p.id));
+    localStorage.setItem(STORAGE_KEYS.PEGAWAI, JSON.stringify(updatedList));
+
+    const currentKegiatan = loadKegiatan();
+    const updatedKegiatan = currentKegiatan.filter((k) => !idSet.has(k.pegawaiId));
+    localStorage.setItem(STORAGE_KEYS.KEGIATAN, JSON.stringify(updatedKegiatan));
+
+    const currentPresensi = loadPresensi();
+    const updatedPresensi = currentPresensi.filter((pr) => !idSet.has(pr.pegawaiId));
+    localStorage.setItem(STORAGE_KEYS.PRESENSI, JSON.stringify(updatedPresensi));
+
+    const mapRaw = localStorage.getItem(STORAGE_KEYS.PENGATURAN_MAP);
+    if (mapRaw) {
+      const map = JSON.parse(mapRaw);
+      if (map) {
+        pegawaiIds.forEach((id) => {
+          if (map[id]) delete map[id];
+        });
+        localStorage.setItem(STORAGE_KEYS.PENGATURAN_MAP, JSON.stringify(map));
+      }
+    }
+
+    return updatedList;
+  } catch (e) {
+    console.warn('Failed batch deleting pegawai permanently', e);
+    return [];
+  }
+};
+
 export const purgeAllDemoAccountsFromStorage = (): Pegawai[] => {
   try {
     const currentList = loadPegawai();
+    const removedIds = currentList.filter((p) => p.role !== 'superadmin').map((p) => p.id);
+    if (removedIds.length > 0) {
+      addDeletedPegawaiIds(removedIds);
+    }
+    setLocalSeedInitialized(true);
+
     // Keep only superadmin or any user with role superadmin
     let retained = currentList.filter((p) => p.role === 'superadmin');
     
