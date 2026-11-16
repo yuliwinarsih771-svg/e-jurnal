@@ -324,9 +324,6 @@ export const PengaturanCopyrightView: React.FC<PengaturanCopyrightViewProps> = (
                   <div>
                     <div className="text-sm font-extrabold text-slate-800">Masuk Akun</div>
                     <div className="h-[2px] w-8 bg-[#f26b6d] rounded-full mt-0.5" />
-                    <div className="text-[10px] text-slate-500 mt-1 truncate">
-                      E-Jurnal Harian Pegawai &middot; {namaInstansi.trim() || 'E-Jurnal Kinerja'}
-                    </div>
                   </div>
                   <div className="h-6 rounded-lg bg-[#f06d6f]/90 flex items-center justify-center text-[10px] font-bold text-white">
                     Masuk

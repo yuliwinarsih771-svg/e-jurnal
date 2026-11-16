@@ -256,7 +256,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
           {/* Form Content Area */}
           <div className="px-7 sm:px-8 pt-1 pb-6">
-            {/* Page Heading with signature coral underline */}
+            {/* Page Heading with signature accent underline */}
             <div className="mb-7">
               <div className="inline-block">
                 <h1 className="text-[28px] font-extrabold text-slate-800 tracking-tight leading-tight">
@@ -264,9 +264,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </h1>
                 <div className="h-[3px] w-16 bg-[var(--login-accent,#f26b6d)] rounded-full mt-1" />
               </div>
-              <p className="text-xs text-slate-500 mt-2 truncate">
-                E-Jurnal Harian Pegawai &middot; {pengaturan.namaInstansi}
-              </p>
             </div>
 
             {/* Error Alert */}

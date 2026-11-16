@@ -571,10 +571,6 @@ export const PengaturanLogoLoginView: React.FC<PengaturanLogoLoginViewProps> = (
                       Masuk Akun
                     </div>
                     <div className="h-[2.5px] w-11 bg-[var(--login-accent,#f26b6d)] rounded-full mt-0.5" />
-                    <div className="text-[10px] text-slate-500 mt-1 truncate">
-                      E-Jurnal Harian Pegawai &middot;{' '}
-                      {defaultPengaturan.namaInstansi || 'E-Jurnal Kinerja'}
-                    </div>
                   </div>
 
                   <div className="space-y-2">
