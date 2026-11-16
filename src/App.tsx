@@ -24,6 +24,7 @@ import { DaftarPegawaiView } from './components/DaftarPegawaiView';
 import { PengingatJurnalView } from './components/PengingatJurnalView';
 import { PengaturanCopyrightView } from './components/PengaturanCopyrightView';
 import { PengaturanWarnaView } from './components/PengaturanWarnaView';
+import { PengaturanLogoLoginView } from './components/PengaturanLogoLoginView';
 import { BellRing } from 'lucide-react';
 import {
   applyThemeCssVariables,
@@ -347,6 +348,31 @@ export default function App() {
     await savePengaturanToFirestore('default', updatedDefault);
   };
 
+  const handleSaveLoginLogo = async (patch: {
+    logoLoginUrl: string;
+    tampilkanLogoLogin: boolean;
+    ukuranLogoLogin: 'sm' | 'md' | 'lg';
+    bentukLogoLogin: 'circle' | 'rounded' | 'plain';
+  }) => {
+    const baseDefault = pengaturanMap['default'] || INITIAL_PENGATURAN;
+    const updatedDefault: PengaturanInstansi = {
+      ...baseDefault,
+      logoLoginUrl: patch.logoLoginUrl,
+      tampilkanLogoLogin: patch.tampilkanLogoLogin,
+      ukuranLogoLogin: patch.ukuranLogoLogin,
+      bentukLogoLogin: patch.bentukLogoLogin,
+    };
+    setPengaturanMap((prev) => {
+      const updatedMap = {
+        ...prev,
+        default: updatedDefault,
+      };
+      saveAllPengaturanMap(updatedMap);
+      return updatedMap;
+    });
+    await savePengaturanToFirestore('default', updatedDefault);
+  };
+
   // Guard:
   // - Super Admin: Mempunyai hak akses ke semua jurnal (monitoring, jurnal harian/mingguan/bulanan, rekapitulasi, cetak, profil, tambah user)
   // - Atasan: Mempunyai akses verifikasi, monitoring, serta jurnal harian/mingguan/bulanan dan cetak
@@ -380,7 +406,8 @@ export default function App() {
         activeTab === 'monitoring' ||
         activeTab === 'tambah-user' ||
         activeTab === 'pengaturan-copyright' ||
-        activeTab === 'pengaturan-warna'
+        activeTab === 'pengaturan-warna' ||
+        activeTab === 'pengaturan-logo-login'
       ) {
         setActiveTab('jurnal-harian');
       }
@@ -391,7 +418,8 @@ export default function App() {
         activeTab === 'daftar-pegawai' ||
         activeTab === 'tambah-user' ||
         activeTab === 'pengaturan-copyright' ||
-        activeTab === 'pengaturan-warna'
+        activeTab === 'pengaturan-warna' ||
+        activeTab === 'pengaturan-logo-login'
       ) {
         setActiveTab('jurnal-harian');
       }
@@ -1288,6 +1316,13 @@ export default function App() {
           <PengaturanWarnaView
             defaultPengaturan={pengaturanMap['default'] || INITIAL_PENGATURAN}
             onSaveThemeColors={handleSaveThemeColors}
+          />
+        )}
+
+        {activeTab === 'pengaturan-logo-login' && currentPegawai.role === 'superadmin' && (
+          <PengaturanLogoLoginView
+            defaultPengaturan={pengaturanMap['default'] || INITIAL_PENGATURAN}
+            onSaveLoginLogo={handleSaveLoginLogo}
           />
         )}
 

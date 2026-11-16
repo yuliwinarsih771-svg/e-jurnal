@@ -225,6 +225,33 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </g>
               </g>
             </svg>
+
+            {/* Global Login Logo configured by Super Admin */}
+            {pengaturan.tampilkanLogoLogin !== false && pengaturan.logoLoginUrl?.trim() && (
+              <div className="absolute inset-x-0 top-5 sm:top-6 flex items-center justify-center pointer-events-none">
+                <div
+                  className={`${
+                    pengaturan.ukuranLogoLogin === 'sm'
+                      ? 'w-14 h-14 sm:w-16 sm:h-16'
+                      : pengaturan.ukuranLogoLogin === 'lg'
+                        ? 'w-24 h-24 sm:w-28 sm:h-28'
+                        : 'w-20 h-20 sm:w-22 sm:h-22'
+                  } ${
+                    pengaturan.bentukLogoLogin === 'circle'
+                      ? 'rounded-full bg-white/95 p-2 shadow-lg ring-4 ring-white/30'
+                      : pengaturan.bentukLogoLogin === 'plain'
+                        ? 'bg-transparent p-0 drop-shadow-md'
+                        : 'rounded-2xl bg-white/95 p-2 shadow-lg ring-4 ring-white/30'
+                  } flex items-center justify-center overflow-hidden`}
+                >
+                  <img
+                    src={pengaturan.logoLoginUrl.trim()}
+                    alt={pengaturan.namaInstansi || 'Logo Instansi'}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Form Content Area */}

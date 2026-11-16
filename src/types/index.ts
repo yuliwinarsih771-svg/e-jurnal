@@ -81,6 +81,12 @@ export interface PengaturanInstansi {
   warnaBgAplikasi?: string;
   warnaBgLogin?: string;
   warnaAksenLogin?: string;
+
+  // Logo Login Khusus Super Admin
+  logoLoginUrl?: string;
+  tampilkanLogoLogin?: boolean;
+  ukuranLogoLogin?: 'sm' | 'md' | 'lg';
+  bentukLogoLogin?: 'circle' | 'rounded' | 'plain';
 }
 
 export interface FilterKinerja {

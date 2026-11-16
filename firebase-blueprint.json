@@ -87,7 +87,11 @@
         "tampilkanCopyrightDiFooter": { "type": "boolean" },
         "warnaBgAplikasi": { "type": "string" },
         "warnaBgLogin": { "type": "string" },
-        "warnaAksenLogin": { "type": "string" }
+        "warnaAksenLogin": { "type": "string" },
+        "logoLoginUrl": { "type": "string" },
+        "tampilkanLogoLogin": { "type": "boolean" },
+        "ukuranLogoLogin": { "type": "string", "enum": ["sm", "md", "lg"] },
+        "bentukLogoLogin": { "type": "string", "enum": ["circle", "rounded", "plain"] }
       },
       "required": ["namaInstansi", "badanDinas", "alamat", "kotaPenetapan", "judulDokumen", "namaAtasan", "nipAtasan"]
     },
