@@ -180,11 +180,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
   };
 
   return (
-    <div className="min-h-[100dvh] bg-slate-100 flex items-center justify-center sm:p-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-[100dvh] bg-[var(--login-bg,#f1f5f9)] flex items-center justify-center p-4 sm:p-6 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] font-['Plus_Jakarta_Sans',sans-serif] transition-colors duration-200">
       {/* Centered White Card matching the coral-wave login design */}
-      <div className="w-full min-h-[100dvh] sm:min-h-0 sm:max-w-[400px] bg-white sm:rounded-3xl sm:shadow-xl sm:border sm:border-slate-200/80 overflow-hidden flex flex-col justify-between">
+      <div className="w-full max-w-[400px] bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden flex flex-col justify-between">
         <div>
-          {/* Top Coral Topographic Wave Header */}
+          {/* Top Topographic Wave Header */}
           <div className="relative w-full h-44 sm:h-48 select-none overflow-hidden bg-white">
             <svg
               viewBox="0 0 400 200"
@@ -194,9 +194,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
             >
               <defs>
                 <linearGradient id="coralHeaderGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#ff8e8e" />
-                  <stop offset="55%" stopColor="#ff7b7b" />
-                  <stop offset="100%" stopColor="#f26b6d" />
+                  <stop offset="0%" stopColor="var(--login-accent-light, #ff8e8e)" />
+                  <stop offset="55%" stopColor="var(--login-accent, #ff7b7b)" />
+                  <stop offset="100%" stopColor="var(--login-accent-dark, #f26b6d)" />
                 </linearGradient>
                 <clipPath id="coralWaveClip">
                   <path d="M0,0 L400,0 L400,152 C335,186 250,185 190,130 C130,76 55,80 0,118 Z" />
@@ -235,7 +235,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 <h1 className="text-[28px] font-extrabold text-slate-800 tracking-tight leading-tight">
                   Masuk Akun
                 </h1>
-                <div className="h-[3px] w-16 bg-[#f26b6d] rounded-full mt-1" />
+                <div className="h-[3px] w-16 bg-[var(--login-accent,#f26b6d)] rounded-full mt-1" />
               </div>
               <p className="text-xs text-slate-500 mt-2 truncate">
                 E-Jurnal Harian Pegawai &middot; {pengaturan.namaInstansi}
@@ -262,7 +262,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 >
                   Username / NIP
                 </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-[#f26b6d] transition-colors pb-2">
+                <div className="flex items-center border-b border-slate-300 focus-within:border-[var(--login-accent,#f26b6d)] transition-colors pb-2">
                   <span className="text-slate-400 pr-2.5 border-r border-slate-200 flex items-center">
                     <User className="w-4 h-4" />
                   </span>
@@ -291,7 +291,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 >
                   Kata Sandi
                 </label>
-                <div className="flex items-center border-b border-slate-300 focus-within:border-[#f26b6d] transition-colors pb-2">
+                <div className="flex items-center border-b border-slate-300 focus-within:border-[var(--login-accent,#f26b6d)] transition-colors pb-2">
                   <span className="text-slate-400 pr-2.5 border-r border-slate-200 flex items-center">
                     <Lock className="w-4 h-4" />
                   </span>
@@ -333,7 +333,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     onClick={() => setRememberMe(!rememberMe)}
                     className={`w-4 h-4 rounded flex items-center justify-center border transition-colors cursor-pointer ${
                       rememberMe
-                        ? 'bg-[#f26b6d] border-[#f26b6d] text-white'
+                        ? 'bg-[var(--login-accent,#f26b6d)] border-[var(--login-accent,#f26b6d)] text-white'
                         : 'bg-white border-slate-300 text-transparent'
                     }`}
                   >
@@ -350,18 +350,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
                     setForgotSuccess(null);
                     setIsForgotModalOpen(true);
                   }}
-                  className="text-[#e85a5e] hover:text-[#d4464b] font-semibold hover:underline cursor-pointer bg-transparent border-none p-0"
+                  className="text-[var(--login-accent,#e85a5e)] hover:text-[var(--login-accent-dark,#d4464b)] font-semibold hover:underline cursor-pointer bg-transparent border-none p-0"
                 >
                   Lupa kata sandi?
                 </button>
               </div>
 
-              {/* Primary Coral Submit Button */}
+              {/* Primary Submit Button */}
               <div className="pt-4">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3 px-5 rounded-xl bg-[#f06d6f] hover:bg-[#e55a5d] active:scale-[0.99] text-white text-sm font-bold shadow-md shadow-rose-300/40 transition flex items-center justify-center space-x-2 disabled:opacity-65 cursor-pointer"
+                  className="w-full py-3 px-5 rounded-xl bg-[var(--login-accent,#f06d6f)] hover:bg-[var(--login-accent-dark,#e55a5d)] active:scale-[0.99] text-white text-sm font-bold shadow-md transition flex items-center justify-center space-x-2 disabled:opacity-65 cursor-pointer"
                 >
                   {isLoading ? (
                     <>
@@ -391,12 +391,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
       {isForgotModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] bg-slate-950/65 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="h-1.5 bg-gradient-to-r from-[#ff8e8e] via-[#f26b6d] to-[#e55a5d]" />
+            <div className="h-1.5 bg-[var(--login-accent,#f26b6d)]" />
 
             <div className="p-5">
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
                 <div className="flex items-center space-x-2.5">
-                  <div className="p-2 rounded-xl bg-rose-50 text-[#e85a5e] border border-rose-200">
+                  <div className="p-2 rounded-xl bg-slate-50 text-[var(--login-accent,#e85a5e)] border border-slate-200">
                     <KeyRound className="w-4 h-4" />
                   </div>
                   <div>
@@ -436,7 +436,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <label className="block font-semibold text-slate-700 mb-1">
                     Username atau NIP
                   </label>
-                  <div className="flex items-center border-b border-slate-300 focus-within:border-[#f26b6d] pb-1.5">
+                  <div className="flex items-center border-b border-slate-300 focus-within:border-[var(--login-accent,#f26b6d)] pb-1.5">
                     <User className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
                     <input
                       type="text"
@@ -456,7 +456,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <label className="block font-semibold text-slate-700 mb-1">
                     Kata Sandi Baru
                   </label>
-                  <div className="flex items-center border-b border-slate-300 focus-within:border-[#f26b6d] pb-1.5">
+                  <div className="flex items-center border-b border-slate-300 focus-within:border-[var(--login-accent,#f26b6d)] pb-1.5">
                     <Lock className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
                     <input
                       type={forgotShowPassword ? 'text' : 'password'}
@@ -487,7 +487,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <label className="block font-semibold text-slate-700 mb-1">
                     Konfirmasi Kata Sandi Baru
                   </label>
-                  <div className="flex items-center border-b border-slate-300 focus-within:border-[#f26b6d] pb-1.5">
+                  <div className="flex items-center border-b border-slate-300 focus-within:border-[var(--login-accent,#f26b6d)] pb-1.5">
                     <Lock className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
                     <input
                       type={forgotShowPassword ? 'text' : 'password'}
@@ -514,7 +514,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <button
                     type="submit"
                     disabled={isResetting}
-                    className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-[#f06d6f] hover:bg-[#e55a5d] shadow-xs transition flex items-center space-x-1.5 disabled:opacity-60 cursor-pointer"
+                    className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-[var(--login-accent,#f06d6f)] hover:bg-[var(--login-accent-dark,#e55a5d)] shadow-xs transition flex items-center space-x-1.5 disabled:opacity-60 cursor-pointer"
                   >
                     {isResetting ? (
                       <>

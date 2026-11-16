@@ -23,7 +23,14 @@ import { TambahUserView } from './components/TambahUserView';
 import { DaftarPegawaiView } from './components/DaftarPegawaiView';
 import { PengingatJurnalView } from './components/PengingatJurnalView';
 import { PengaturanCopyrightView } from './components/PengaturanCopyrightView';
+import { PengaturanWarnaView } from './components/PengaturanWarnaView';
 import { BellRing } from 'lucide-react';
+import {
+  applyThemeCssVariables,
+  DEFAULT_APP_BG,
+  isDarkColor,
+  normalizeHexColor,
+} from './utils/themeColors';
 
 import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord, PengingatJurnal } from './types';
 import { INITIAL_PENGATURAN, INITIAL_PEGAWAI } from './data/initialData';
@@ -174,9 +181,15 @@ export default function App() {
     };
   }, []);
 
-  // Sync settings map with local storage as backup cache
+  // Sync settings map with local storage as backup cache & apply global background colors
   useEffect(() => {
     saveAllPengaturanMap(pengaturanMap);
+    const defaultCfg = pengaturanMap['default'] || INITIAL_PENGATURAN;
+    applyThemeCssVariables(defaultCfg);
+    document.body.style.backgroundColor = normalizeHexColor(
+      defaultCfg.warnaBgAplikasi,
+      DEFAULT_APP_BG
+    );
   }, [pengaturanMap]);
 
   useEffect(() => {
@@ -311,6 +324,29 @@ export default function App() {
     await savePengaturanToFirestore('default', updatedDefault);
   };
 
+  const handleSaveThemeColors = async (patch: {
+    warnaBgAplikasi: string;
+    warnaBgLogin: string;
+    warnaAksenLogin: string;
+  }) => {
+    const baseDefault = pengaturanMap['default'] || INITIAL_PENGATURAN;
+    const updatedDefault: PengaturanInstansi = {
+      ...baseDefault,
+      warnaBgAplikasi: patch.warnaBgAplikasi,
+      warnaBgLogin: patch.warnaBgLogin,
+      warnaAksenLogin: patch.warnaAksenLogin,
+    };
+    setPengaturanMap((prev) => {
+      const updatedMap = {
+        ...prev,
+        default: updatedDefault,
+      };
+      saveAllPengaturanMap(updatedMap);
+      return updatedMap;
+    });
+    await savePengaturanToFirestore('default', updatedDefault);
+  };
+
   // Guard:
   // - Super Admin: Mempunyai hak akses ke semua jurnal (monitoring, jurnal harian/mingguan/bulanan, rekapitulasi, cetak, profil, tambah user)
   // - Atasan: Mempunyai akses verifikasi, monitoring, serta jurnal harian/mingguan/bulanan dan cetak
@@ -343,7 +379,8 @@ export default function App() {
         activeTab === 'verifikasi' ||
         activeTab === 'monitoring' ||
         activeTab === 'tambah-user' ||
-        activeTab === 'pengaturan-copyright'
+        activeTab === 'pengaturan-copyright' ||
+        activeTab === 'pengaturan-warna'
       ) {
         setActiveTab('jurnal-harian');
       }
@@ -353,7 +390,8 @@ export default function App() {
         activeTab === 'monitoring' ||
         activeTab === 'daftar-pegawai' ||
         activeTab === 'tambah-user' ||
-        activeTab === 'pengaturan-copyright'
+        activeTab === 'pengaturan-copyright' ||
+        activeTab === 'pengaturan-warna'
       ) {
         setActiveTab('jurnal-harian');
       }
@@ -929,8 +967,12 @@ export default function App() {
     );
   }
 
+  const appBgIsDark = isDarkColor(
+    normalizeHexColor(pengaturanMap['default']?.warnaBgAplikasi, DEFAULT_APP_BG)
+  );
+
   return (
-    <div className="min-h-screen bg-[#f0f0f1] font-sans antialiased">
+    <div className="min-h-screen bg-[var(--app-bg,#f0f0f1)] font-sans antialiased transition-colors duration-200">
       
       {/* WordPress Admin Top Bar */}
       <WpAdminBar
@@ -1242,6 +1284,13 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'pengaturan-warna' && currentPegawai.role === 'superadmin' && (
+          <PengaturanWarnaView
+            defaultPengaturan={pengaturanMap['default'] || INITIAL_PENGATURAN}
+            onSaveThemeColors={handleSaveThemeColors}
+          />
+        )}
+
         {activeTab === 'profil' && (
           <ProfilPenggunaView
             key={currentPegawai.id}
@@ -1257,25 +1306,31 @@ export default function App() {
         </main>
 
         {/* App Footer */}
-        <footer className="py-2.5 px-3 sm:px-6 text-xs text-[#50575e] border-t border-[#dcdcde] bg-[#f0f0f1] flex flex-col sm:flex-row items-center justify-between gap-1.5 print:hidden">
+        <footer
+          className={`py-2.5 px-3 sm:px-6 text-xs border-t bg-[var(--app-bg,#f0f0f1)] flex flex-col sm:flex-row items-center justify-between gap-1.5 print:hidden transition-colors duration-200 ${
+            appBgIsDark
+              ? 'text-slate-300 border-white/15'
+              : 'text-[#50575e] border-[#dcdcde]'
+          }`}
+        >
           <p>
-            <span className="font-semibold text-slate-700">
+            <span className={`font-semibold ${appBgIsDark ? 'text-white' : 'text-slate-700'}`}>
               {pengaturanMap['default']?.tampilkanCopyrightDiFooter &&
               pengaturanMap['default']?.teksCopyright?.trim()
                 ? pengaturanMap['default'].teksCopyright.trim()
                 : currentPengaturan.namaInstansi || 'E-Jurnal Kinerja'}
             </span>
           </p>
-          <div className="flex items-center space-x-3 text-[11px] text-[#8c8f94]">
+          <div className={`flex items-center space-x-3 text-[11px] ${appBgIsDark ? 'text-slate-300' : 'text-[#8c8f94]'}`}>
             <span className="flex items-center space-x-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-slate-600 font-medium">Firestore Realtime Aktif</span>
+              <span className={`font-medium ${appBgIsDark ? 'text-slate-200' : 'text-slate-600'}`}>Firestore Realtime Aktif</span>
             </span>
             <span>&bull;</span>
             <button
               type="button"
               onClick={() => setIsLaravelDocsOpen(true)}
-              className="text-[#2271b1] hover:underline"
+              className={`${appBgIsDark ? 'text-sky-300' : 'text-[#2271b1]'} hover:underline`}
             >
               Dokumentasi API
             </button>

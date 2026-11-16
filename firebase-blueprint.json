@@ -84,7 +84,10 @@
         "jamPulangNormal": { "type": "string" },
         "toleransiKeterlambatanMenit": { "type": "number" },
         "teksCopyright": { "type": "string" },
-        "tampilkanCopyrightDiFooter": { "type": "boolean" }
+        "tampilkanCopyrightDiFooter": { "type": "boolean" },
+        "warnaBgAplikasi": { "type": "string" },
+        "warnaBgLogin": { "type": "string" },
+        "warnaAksenLogin": { "type": "string" }
       },
       "required": ["namaInstansi", "badanDinas", "alamat", "kotaPenetapan", "judulDokumen", "namaAtasan", "nipAtasan"]
     },

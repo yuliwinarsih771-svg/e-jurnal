@@ -76,6 +76,11 @@ export interface PengaturanInstansi {
   // Copyright & Footer Khusus Super Admin
   teksCopyright?: string;
   tampilkanCopyrightDiFooter?: boolean;
+
+  // Warna Background Aplikasi & Login Khusus Super Admin
+  warnaBgAplikasi?: string;
+  warnaBgLogin?: string;
+  warnaAksenLogin?: string;
 }
 
 export interface FilterKinerja {

@@ -31,7 +31,8 @@ export type NavTab =
   | 'tambah-user'
   | 'daftar-pegawai'
   | 'pengingat'
-  | 'pengaturan-copyright';
+  | 'pengaturan-copyright'
+  | 'pengaturan-warna';
 
 interface NavbarProps {
   activeTab: NavTab;
