@@ -72,6 +72,10 @@ export interface PengaturanInstansi {
   jamMasukNormal: string; // '07:30'
   jamPulangNormal: string; // '16:00'
   toleransiKeterlambatanMenit: number; // 15
+
+  // Copyright & Footer Khusus Super Admin
+  teksCopyright?: string;
+  tampilkanCopyrightDiFooter?: boolean;
 }
 
 export interface FilterKinerja {

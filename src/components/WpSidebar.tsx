@@ -18,7 +18,8 @@ import {
   CalendarDays,
   ShieldCheck,
   Plus,
-  Bell
+  Bell,
+  Copyright
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -36,7 +37,8 @@ export type NavTab =
   | 'profil' 
   | 'tambah-user'
   | 'daftar-pegawai'
-  | 'pengingat';
+  | 'pengingat'
+  | 'pengaturan-copyright';
 
 interface WpSidebarProps {
   activeTab: NavTab;
@@ -319,23 +321,42 @@ export const WpSidebar: React.FC<WpSidebarProps> = ({
               </li>
             )}
 
-            {/* Khusus Super Admin: Tambah Akun */}
+            {/* Khusus Super Admin: Tambah Akun & Teks Copyright */}
             {userRole === 'superadmin' && (
-              <li>
-                <button
-                  type="button"
-                  onClick={() => handleSelectTab('tambah-user')}
-                  className={`w-full flex items-center px-3 py-2 text-left relative transition cursor-pointer group ${
-                    isTabActive('tambah-user')
-                      ? 'bg-[#2271b1] text-white font-semibold after:content-[""] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:border-[5px] after:border-y-transparent after:border-l-transparent after:border-r-[#f0f0f1]'
-                      : 'hover:bg-[#191e23] hover:text-[#72aee6] text-[#c3c4c7]'
-                  }`}
-                  title="Tambah Pengguna Baru"
-                >
-                  <Plus className={`w-4 h-4 shrink-0 ${isTabActive('tambah-user') ? 'text-white' : 'text-[#8c8f94] group-hover:text-[#72aee6]'}`} />
-                  {!isCollapsed && <span className="ml-2.5 truncate">Tambah Akun</span>}
-                </button>
-              </li>
+              <>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab('tambah-user')}
+                    className={`w-full flex items-center px-3 py-2 text-left relative transition cursor-pointer group ${
+                      isTabActive('tambah-user')
+                        ? 'bg-[#2271b1] text-white font-semibold after:content-[""] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:border-[5px] after:border-y-transparent after:border-l-transparent after:border-r-[#f0f0f1]'
+                        : 'hover:bg-[#191e23] hover:text-[#72aee6] text-[#c3c4c7]'
+                    }`}
+                    title="Tambah Pengguna Baru"
+                  >
+                    <Plus className={`w-4 h-4 shrink-0 ${isTabActive('tambah-user') ? 'text-white' : 'text-[#8c8f94] group-hover:text-[#72aee6]'}`} />
+                    {!isCollapsed && <span className="ml-2.5 truncate">Tambah Akun</span>}
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTab('pengaturan-copyright')}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left relative transition cursor-pointer group ${
+                      isTabActive('pengaturan-copyright')
+                        ? 'bg-[#2271b1] text-white font-semibold after:content-[""] after:absolute after:right-0 after:top-1/2 after:-translate-y-1/2 after:border-[5px] after:border-y-transparent after:border-l-transparent after:border-r-[#f0f0f1]'
+                        : 'hover:bg-[#191e23] hover:text-[#72aee6] text-[#c3c4c7]'
+                    }`}
+                    title="Menu Khusus Super Admin: Ubah Teks Copyright"
+                  >
+                    <div className="flex items-center min-w-0">
+                      <Copyright className={`w-4 h-4 shrink-0 ${isTabActive('pengaturan-copyright') ? 'text-white' : 'text-[#8c8f94] group-hover:text-[#72aee6]'}`} />
+                      {!isCollapsed && <span className="ml-2.5 truncate">Teks Copyright</span>}
+                    </div>
+                  </button>
+                </li>
+              </>
             )}
 
             {/* 7. Settings (Pengaturan) */}

@@ -380,7 +380,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
         {/* Clean Unboxed Footer */}
         <div className="px-7 pb-5 pt-2 text-center text-[11px] text-slate-400">
           <span>
-            &copy; {new Date().getFullYear()} {pengaturan.namaInstansi || 'E-Jurnal Kinerja'}
+            {pengaturan.teksCopyright?.trim()
+              ? pengaturan.teksCopyright.trim()
+              : `\u00A9 ${new Date().getFullYear()} ${pengaturan.namaInstansi || 'E-Jurnal Kinerja'}`}
           </span>
         </div>
       </div>

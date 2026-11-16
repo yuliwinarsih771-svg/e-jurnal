@@ -82,7 +82,9 @@
         "pangkatAtasan": { "type": "string" },
         "jamMasukNormal": { "type": "string" },
         "jamPulangNormal": { "type": "string" },
-        "toleransiKeterlambatanMenit": { "type": "number" }
+        "toleransiKeterlambatanMenit": { "type": "number" },
+        "teksCopyright": { "type": "string" },
+        "tampilkanCopyrightDiFooter": { "type": "boolean" }
       },
       "required": ["namaInstansi", "badanDinas", "alamat", "kotaPenetapan", "judulDokumen", "namaAtasan", "nipAtasan"]
     },

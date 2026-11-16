@@ -22,6 +22,7 @@ import { ProfilPenggunaView } from './components/ProfilPenggunaView';
 import { TambahUserView } from './components/TambahUserView';
 import { DaftarPegawaiView } from './components/DaftarPegawaiView';
 import { PengingatJurnalView } from './components/PengingatJurnalView';
+import { PengaturanCopyrightView } from './components/PengaturanCopyrightView';
 import { BellRing } from 'lucide-react';
 
 import { Pegawai, PengaturanInstansi, KegiatanJurnal, PresensiRecord, PengingatJurnal } from './types';
@@ -285,6 +286,31 @@ export default function App() {
     });
   };
 
+  const handleSaveGlobalCopyright = async (patch: {
+    teksCopyright: string;
+    tampilkanCopyrightDiFooter: boolean;
+    namaInstansi?: string;
+  }) => {
+    const baseDefault = pengaturanMap['default'] || INITIAL_PENGATURAN;
+    const updatedDefault: PengaturanInstansi = {
+      ...baseDefault,
+      teksCopyright: patch.teksCopyright,
+      tampilkanCopyrightDiFooter: patch.tampilkanCopyrightDiFooter,
+      ...(patch.namaInstansi && patch.namaInstansi.trim()
+        ? { namaInstansi: patch.namaInstansi.trim() }
+        : {}),
+    };
+    setPengaturanMap((prev) => {
+      const updatedMap = {
+        ...prev,
+        default: updatedDefault,
+      };
+      saveAllPengaturanMap(updatedMap);
+      return updatedMap;
+    });
+    await savePengaturanToFirestore('default', updatedDefault);
+  };
+
   // Guard:
   // - Super Admin: Mempunyai hak akses ke semua jurnal (monitoring, jurnal harian/mingguan/bulanan, rekapitulasi, cetak, profil, tambah user)
   // - Atasan: Mempunyai akses verifikasi, monitoring, serta jurnal harian/mingguan/bulanan dan cetak
@@ -313,7 +339,12 @@ export default function App() {
         setActiveTab('monitoring');
       }
     } else if (currentPegawai.role === 'admin') {
-      if (activeTab === 'verifikasi' || activeTab === 'monitoring' || activeTab === 'tambah-user') {
+      if (
+        activeTab === 'verifikasi' ||
+        activeTab === 'monitoring' ||
+        activeTab === 'tambah-user' ||
+        activeTab === 'pengaturan-copyright'
+      ) {
         setActiveTab('jurnal-harian');
       }
     } else {
@@ -321,7 +352,8 @@ export default function App() {
         activeTab === 'verifikasi' ||
         activeTab === 'monitoring' ||
         activeTab === 'daftar-pegawai' ||
-        activeTab === 'tambah-user'
+        activeTab === 'tambah-user' ||
+        activeTab === 'pengaturan-copyright'
       ) {
         setActiveTab('jurnal-harian');
       }
@@ -1203,6 +1235,13 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'pengaturan-copyright' && currentPegawai.role === 'superadmin' && (
+          <PengaturanCopyrightView
+            defaultPengaturan={pengaturanMap['default'] || INITIAL_PENGATURAN}
+            onSaveGlobalCopyright={handleSaveGlobalCopyright}
+          />
+        )}
+
         {activeTab === 'profil' && (
           <ProfilPenggunaView
             key={currentPegawai.id}
@@ -1220,7 +1259,12 @@ export default function App() {
         {/* App Footer */}
         <footer className="py-2.5 px-3 sm:px-6 text-xs text-[#50575e] border-t border-[#dcdcde] bg-[#f0f0f1] flex flex-col sm:flex-row items-center justify-between gap-1.5 print:hidden">
           <p>
-            <span className="font-semibold text-slate-700">{currentPengaturan.namaInstansi || 'E-Jurnal Kinerja'}</span>
+            <span className="font-semibold text-slate-700">
+              {pengaturanMap['default']?.tampilkanCopyrightDiFooter &&
+              pengaturanMap['default']?.teksCopyright?.trim()
+                ? pengaturanMap['default'].teksCopyright.trim()
+                : currentPengaturan.namaInstansi || 'E-Jurnal Kinerja'}
+            </span>
           </p>
           <div className="flex items-center space-x-3 text-[11px] text-[#8c8f94]">
             <span className="flex items-center space-x-1.5">
