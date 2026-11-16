@@ -689,9 +689,15 @@ export default function App() {
   };
 
   // Pengingat Jurnal Handlers
-  const handleSendPengingat = async (targets: Pegawai[], tanggalTarget: string, pesan: string) => {
+  const handleSendPengingat = async (
+    targets: Pegawai[],
+    tanggalTarget: string,
+    pesan: string,
+    options?: { viaWhatsApp?: boolean }
+  ): Promise<PengingatJurnal[]> => {
     const nowIso = new Date().toISOString();
     const baseTs = Date.now();
+    const isWa = Boolean(options?.viaWhatsApp);
     const newItems: PengingatJurnal[] = targets.map((peg, idx) => ({
       id: `rem-${baseTs}-${idx}-${peg.id}`,
       pegawaiId: peg.id,
@@ -702,12 +708,40 @@ export default function App() {
       pengirimId: currentPegawai.id,
       pengirimNama: currentPegawai.nama,
       pengirimJabatan: currentPegawai.jabatan,
+      pengirimNoHp: currentPegawai.noHp || '',
       status: 'unread',
+      viaWhatsApp: isWa,
+      noHpTujuan: peg.noHp || '',
+      ...(isWa ? { waSentAt: nowIso } : {}),
       createdAt: nowIso,
     }));
 
     setPengingatList((prev) => [...newItems, ...prev]);
     await saveMultiplePengingatToFirestore(newItems);
+    return newItems;
+  };
+
+  const handleMarkPengingatWaSent = (pengingatId: string, noHpTujuan?: string) => {
+    const nowIso = new Date().toISOString();
+    setPengingatList((prev) =>
+      prev.map((pg) => {
+        if (pg.id === pengingatId) {
+          const updated: PengingatJurnal = {
+            ...pg,
+            viaWhatsApp: true,
+            waSentAt: nowIso,
+            ...(noHpTujuan !== undefined ? { noHpTujuan } : {}),
+          };
+          savePengingatToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return pg;
+      })
+    );
+  };
+
+  const handleUpdatePegawaiNoHp = (pegId: string, noHp: string) => {
+    handleUpdatePegawaiProfile(pegId, { noHp: noHp.trim() });
   };
 
   const handleMarkPengingatRead = (pengingatId: string) => {
@@ -935,8 +969,15 @@ export default function App() {
                   <p className="text-slate-700 mt-0.5 line-clamp-2">
                     {myUnreadPengingat[0].pesan}
                   </p>
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    Dari: <strong>{myUnreadPengingat[0].pengirimNama}</strong> &bull; Target Tanggal: <strong>{myUnreadPengingat[0].tanggalTarget}</strong>
+                  <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-2">
+                    <span>
+                      Dari: <strong>{myUnreadPengingat[0].pengirimNama}</strong> &bull; Target Tanggal: <strong>{myUnreadPengingat[0].tanggalTarget}</strong>
+                    </span>
+                    {myUnreadPengingat[0].viaWhatsApp && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold text-[10px]">
+                        Dikirim via WhatsApp
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1132,6 +1173,8 @@ export default function App() {
             kegiatanList={kegiatanList}
             pengingatList={pengingatList}
             onSendPengingat={handleSendPengingat}
+            onMarkPengingatWaSent={handleMarkPengingatWaSent}
+            onUpdatePegawaiNoHp={handleUpdatePegawaiNoHp}
             onMarkAsRead={handleMarkPengingatRead}
             onMarkAllAsRead={handleMarkAllPengingatRead}
             onDeletePengingat={handleDeletePengingat}

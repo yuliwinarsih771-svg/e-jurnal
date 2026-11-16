@@ -19,6 +19,12 @@ import {
   X,
   Inbox,
   History,
+  MessageCircle,
+  Phone,
+  Edit3,
+  Save,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { Pegawai, KegiatanJurnal, PengingatJurnal } from '../types';
 import { formatTanggalIndonesia } from '../utils/exportUtils';
@@ -29,11 +35,27 @@ interface PengingatJurnalViewProps {
   allPegawai: Pegawai[];
   kegiatanList: KegiatanJurnal[];
   pengingatList: PengingatJurnal[];
-  onSendPengingat: (targets: Pegawai[], tanggalTarget: string, pesan: string) => Promise<void> | void;
+  onSendPengingat: (
+    targets: Pegawai[],
+    tanggalTarget: string,
+    pesan: string,
+    options?: { viaWhatsApp?: boolean }
+  ) => Promise<PengingatJurnal[]> | PengingatJurnal[] | Promise<void> | void;
+  onMarkPengingatWaSent: (pengingatId: string, noHpTujuan?: string) => void;
+  onUpdatePegawaiNoHp: (pegId: string, noHp: string) => void;
   onMarkAsRead: (pengingatId: string) => void;
   onMarkAllAsRead: () => void;
   onDeletePengingat: (pengingatId: string) => void;
   onOpenJurnalForDate: (tanggal: string) => void;
+}
+
+interface WaQueueItem {
+  pengingatId: string;
+  pegawaiId: string;
+  pegawaiSnapshot: Pegawai;
+  pesan: string;
+  tanggalTarget: string;
+  dispatched: boolean;
 }
 
 const getTodayLocalIso = (): string => {
@@ -53,12 +75,24 @@ const getYesterdayLocalIso = (): string => {
   return `${y}-${m}-${d}`;
 };
 
+// Normalize Indonesian phone number for WhatsApp wa.me links (08xx -> 628xx)
+export const formatWaNumber = (noHp?: string): string | null => {
+  if (!noHp) return null;
+  const digits = noHp.replace(/\D/g, '');
+  if (digits.length < 9) return null;
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
+};
+
 export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
   currentPegawai,
   allPegawai,
   kegiatanList,
   pengingatList,
   onSendPengingat,
+  onMarkPengingatWaSent,
+  onUpdatePegawaiNoHp,
   onMarkAsRead,
   onMarkAllAsRead,
   onDeletePengingat,
@@ -91,9 +125,21 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
   const [isSending, setIsSending] = useState<boolean>(false);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Inline WhatsApp number editing state (table/card & queue modal & self-inbox)
+  const [editingNoHpId, setEditingNoHpId] = useState<string | null>(null);
+  const [editingNoHpVal, setEditingNoHpVal] = useState<string>('');
+
+  const [selfEditingWa, setSelfEditingWa] = useState<boolean>(!currentPegawai.noHp);
+  const [selfNoHpInput, setSelfNoHpInput] = useState<string>(currentPegawai.noHp || '');
+
+  // Multi-account WhatsApp Queue Modal state
+  const [waQueueModalOpen, setWaQueueModalOpen] = useState<boolean>(false);
+  const [waQueueItems, setWaQueueItems] = useState<WaQueueItem[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
   const showNotice = (type: 'success' | 'error', text: string) => {
     setNotice({ type, text });
-    setTimeout(() => setNotice(null), 4500);
+    setTimeout(() => setNotice(null), 5000);
   };
 
   // Monitored employee accounts (exclude superadmin & self so admins/supervisors remind staff)
@@ -133,6 +179,11 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
     [accountStatuses]
   );
 
+  const belumMissingWaCount = useMemo(
+    () => belumList.filter((item) => !formatWaNumber(item.pegawai.noHp)).length,
+    [belumList]
+  );
+
   const sentCountForDate = useMemo(() => {
     return pengingatList.filter((pg) => pg.tanggalTarget === selectedDate).length;
   }, [pengingatList, selectedDate]);
@@ -147,6 +198,7 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
         item.pegawai.nama.toLowerCase().includes(q) ||
         item.pegawai.nip.toLowerCase().includes(q) ||
         (item.pegawai.username || '').toLowerCase().includes(q) ||
+        (item.pegawai.noHp || '').toLowerCase().includes(q) ||
         item.pegawai.jabatan.toLowerCase().includes(q) ||
         item.pegawai.unitKerja.toLowerCase().includes(q)
       );
@@ -163,6 +215,36 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
   }, [selectedDate]);
 
   const effectiveMessage = customPesan.trim() || defaultMessageTemplate;
+
+  const buildWhatsAppMessage = (
+    peg: { nama: string; nip: string },
+    pesan: string,
+    tglTarget: string
+  ): string => {
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const tglFormatted = formatTanggalIndonesia(tglTarget);
+    return (
+      `*[PENGINGAT E-JURNAL HARIAN]*\n` +
+      `Yth. *${peg.nama}*\n` +
+      `NIP. ${peg.nip}\n` +
+      `Tanggal Target: *${tglFormatted}*\n\n` +
+      `${pesan}\n\n` +
+      (appUrl ? `Buka Aplikasi E-Jurnal:\n${appUrl}\n\n` : '') +
+      `Pengirim: ${currentPegawai.nama}` +
+      (currentPegawai.jabatan ? ` (${currentPegawai.jabatan})` : '')
+    );
+  };
+
+  const buildWhatsAppUrl = (
+    peg: { nama: string; nip: string; noHp?: string },
+    pesan: string,
+    tglTarget: string = selectedDate
+  ): string => {
+    const waNum = formatWaNumber(peg.noHp);
+    const fullText = buildWhatsAppMessage(peg, pesan, tglTarget);
+    const encoded = encodeURIComponent(fullText);
+    return waNum ? `https://wa.me/${waNum}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) =>
@@ -181,14 +263,48 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
     }
   };
 
-  const handleSendSingle = async (pegawai: Pegawai) => {
+  const handleStartEditNoHp = (peg: Pegawai) => {
+    setEditingNoHpId(peg.id);
+    setEditingNoHpVal(peg.noHp || '');
+  };
+
+  const handleSaveInlineNoHp = (peg: Pegawai) => {
+    const trimmed = editingNoHpVal.trim();
+    if (trimmed && !formatWaNumber(trimmed)) {
+      showNotice('error', 'Format nomor WhatsApp minimal 9 digit angka (contoh: 081234567890).');
+      return;
+    }
+    onUpdatePegawaiNoHp(peg.id, trimmed);
+    setEditingNoHpId(null);
+    showNotice(
+      'success',
+      trimmed
+        ? `Nomor WhatsApp ${peg.nama} (${trimmed}) berhasil disimpan ke akun.`
+        : `Nomor WhatsApp ${peg.nama} dikosongkan.`
+    );
+  };
+
+  const handleSaveSelfNoHp = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = selfNoHpInput.trim();
+    if (!formatWaNumber(trimmed)) {
+      showNotice('error', 'Masukkan nomor WhatsApp yang valid (minimal 9 digit, contoh: 081234567890).');
+      return;
+    }
+    onUpdatePegawaiNoHp(currentPegawai.id, trimmed);
+    setSelfEditingWa(false);
+    confetti({ particleCount: 30, spread: 45, origin: { y: 0.7 } });
+    showNotice('success', `Nomor WhatsApp akun Anda (${trimmed}) berhasil disimpan!`);
+  };
+
+  const handleSendSingleInApp = async (pegawai: Pegawai) => {
     setIsSending(true);
     try {
-      await onSendPengingat([pegawai], selectedDate, effectiveMessage);
+      await onSendPengingat([pegawai], selectedDate, effectiveMessage, { viaWhatsApp: false });
       confetti({ particleCount: 35, spread: 50, origin: { y: 0.6 } });
       showNotice(
         'success',
-        `Pengingat berhasil dikirim langsung ke akun ${pegawai.nama} (@${pegawai.username || 'user'}).`
+        `Pengingat berhasil dikirim ke akun ${pegawai.nama} (@${pegawai.username || 'user'}).`
       );
     } catch (err: any) {
       showNotice('error', err?.message || 'Gagal mengirim pengingat.');
@@ -197,7 +313,7 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
     }
   };
 
-  const handleSendBatch = async () => {
+  const handleSendBatchInApp = async () => {
     const targets = monitoredAccounts.filter((p) => selectedIds.includes(p.id));
     if (targets.length === 0) {
       showNotice('error', 'Pilih minimal 1 akun yang belum mengerjakan jurnal.');
@@ -205,7 +321,7 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
     }
     setIsSending(true);
     try {
-      await onSendPengingat(targets, selectedDate, effectiveMessage);
+      await onSendPengingat(targets, selectedDate, effectiveMessage, { viaWhatsApp: false });
       setSelectedIds([]);
       confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
       showNotice(
@@ -219,25 +335,49 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
     }
   };
 
-  const handleSendToAllBelum = async () => {
-    const targets = belumList.map((item) => item.pegawai);
+  const openWhatsAppQueueForTargets = async (targets: Pegawai[]) => {
     if (targets.length === 0) {
-      showNotice('error', 'Semua akun sudah mengerjakan jurnal pada tanggal ini.');
+      showNotice('error', 'Pilih minimal 1 akun yang belum mengerjakan jurnal.');
       return;
     }
     setIsSending(true);
     try {
-      await onSendPengingat(targets, selectedDate, effectiveMessage);
+      const result = await onSendPengingat(targets, selectedDate, effectiveMessage, {
+        viaWhatsApp: false,
+      });
+      const createdArr = Array.isArray(result) ? result : [];
+      const queue: WaQueueItem[] = targets.map((peg, idx) => {
+        const matched = createdArr.find((r) => r.pegawaiId === peg.id) || createdArr[idx];
+        return {
+          pengingatId: matched?.id || `rem-local-${Date.now()}-${idx}`,
+          pegawaiId: peg.id,
+          pegawaiSnapshot: peg,
+          pesan: effectiveMessage,
+          tanggalTarget: selectedDate,
+          dispatched: false,
+        };
+      });
+      setWaQueueItems(queue);
+      setWaQueueModalOpen(true);
       setSelectedIds([]);
-      confetti({ particleCount: 70, spread: 75, origin: { y: 0.6 } });
       showNotice(
         'success',
-        `Pengingat otomatis terkirim ke seluruh ${targets.length} akun yang belum mengerjakan jurnal!`
+        `Pengingat dicatat untuk ${targets.length} akun. Lanjutkan klik "Kirim ke WhatsApp" per akun pada panel antrean.`
       );
     } catch (err: any) {
-      showNotice('error', err?.message || 'Gagal mengirim pengingat ke semua akun.');
+      showNotice('error', err?.message || 'Gagal menyiapkan pengiriman pengingat WhatsApp.');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleCopyMessage = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      showNotice('error', 'Tidak dapat menyalin pesan otomatis.');
     }
   };
 
@@ -261,6 +401,11 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
   const hasFilledForDate = (pegId: string, tgl: string) => {
     return kegiatanList.some((k) => k.pegawaiId === pegId && k.tanggal === tgl);
   };
+
+  const waQueueDispatchedCount = useMemo(
+    () => waQueueItems.filter((item) => item.dispatched).length,
+    [waQueueItems]
+  );
 
   return (
     <div className="space-y-4 font-sans">
@@ -288,12 +433,12 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-[#1d2327] flex items-center space-x-2">
               <BellRing className="w-5 h-5 text-[#2271b1]" />
-              <span>Pengingat Jurnal Pegawai</span>
+              <span>Pengingat Jurnal &amp; WhatsApp Pegawai</span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {isSenderRole
-                ? 'Deteksi akun pegawai yang belum mengerjakan jurnal dan kirim notifikasi pengingat langsung ke akun masing-masing secara real-time.'
-                : 'Daftar pengingat pengisian jurnal harian yang dikirim langsung ke akun Anda oleh Atasan / Admin.'}
+                ? 'Deteksi akun pegawai yang belum mengerjakan jurnal, lalu kirim pengingat langsung ke WhatsApp masing-masing akun & notifikasi aplikasi.'
+                : 'Daftar pengingat pengisian jurnal harian dari Atasan/Admin serta pengaturan nomor WhatsApp akun Anda.'}
             </p>
           </div>
 
@@ -310,7 +455,7 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <MessageCircle className="w-3.5 h-3.5" />
                   <span>Belum Mengisi &amp; Kirim</span>
                   {belumList.length > 0 && (
                     <span
@@ -364,7 +509,7 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
       </div>
 
       {/* =====================================================================
-          TAB 1: DETEKSI AKUN BELUM MENGERJAKAN & KIRIM PENGINGAT (ATASAN/ADMIN)
+          TAB 1: DETEKSI AKUN BELUM MENGERJAKAN & KIRIM PENGINGAT + WHATSAPP
          ===================================================================== */}
       {isSenderRole && activeSubTab === 'kirim' && (
         <div className="space-y-4">
@@ -472,27 +617,68 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
             </div>
           </div>
 
+          {/* Missing WhatsApp Number Helper Banner */}
+          {belumMissingWaCount > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-start space-x-2">
+                <Phone className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <strong>{belumMissingWaCount} dari {belumList.length} akun</strong> yang belum mengerjakan jurnal belum memiliki Nomor WhatsApp.
+                  <span className="text-amber-800 block sm:inline sm:ml-1">
+                    Klik <strong>&ldquo;+ Isi No. WA&rdquo;</strong> pada tabel di bawah (atau pegawai mengisi di menu Pengingat Masuk / Profil Anda) agar pesan otomatis tertuju ke WhatsApp masing-masing akun.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Composer & Bulk Send Box */}
           <div className="bg-white border border-[#c3c4c7] rounded-lg p-4 shadow-2xs space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
               <div>
-                <h2 className="text-xs sm:text-sm font-bold text-[#1d2327]">
-                  Pesan Pengingat ke Akun Penerima
+                <h2 className="text-xs sm:text-sm font-bold text-[#1d2327] flex items-center space-x-1.5">
+                  <MessageCircle className="w-4 h-4 text-emerald-600" />
+                  <span>Pesan Pengingat ke WhatsApp &amp; Akun Pegawai</span>
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Pesan ini akan muncul langsung di kotak masuk &amp; notifikasi akun pegawai yang belum mengisi jurnal.
+                  Nama pegawai, tanggal target, dan tautan langsung aplikasi E-Jurnal otomatis disertakan pada setiap pesan WhatsApp.
                 </p>
               </div>
               {belumList.length > 0 && (
-                <button
-                  type="button"
-                  disabled={isSending}
-                  onClick={handleSendToAllBelum}
-                  className="px-3.5 py-2 bg-[#d63638] hover:bg-[#b32d2e] text-white text-xs font-bold rounded shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 shrink-0"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Kirim ke Semua yang Belum ({belumList.length} Akun)</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={isSending}
+                    onClick={() => openWhatsAppQueueForTargets(belumList.map((i) => i.pegawai))}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Kirim via WhatsApp Semua ({belumList.length} Akun)</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSending}
+                    onClick={async () => {
+                      const targets = belumList.map((i) => i.pegawai);
+                      setIsSending(true);
+                      try {
+                        await onSendPengingat(targets, selectedDate, effectiveMessage, { viaWhatsApp: false });
+                        setSelectedIds([]);
+                        confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+                        showNotice('success', `Pengingat notifikasi aplikasi terkirim ke ${targets.length} akun.`);
+                      } catch (err: any) {
+                        showNotice('error', err?.message || 'Gagal mengirim pengingat ke semua akun.');
+                      } finally {
+                        setIsSending(false);
+                      }
+                    }}
+                    title="Kirim notifikasi ke kotak masuk akun di aplikasi tanpa membuka WhatsApp"
+                    className="px-3 py-2 bg-[#2271b1] hover:bg-[#135e96] text-white text-xs font-semibold rounded shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Akun Saja</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -541,26 +727,40 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {selectedIds.length > 0 && (
-                  <button
-                    type="button"
-                    disabled={isSending}
-                    onClick={handleSendBatch}
-                    className="px-3 py-1.5 bg-[#2271b1] hover:bg-[#135e96] text-white text-xs font-bold rounded shadow-xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Kirim Terpilih ({selectedIds.length})</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => {
+                        const targets = monitoredAccounts.filter((p) => selectedIds.includes(p.id));
+                        openWhatsAppQueueForTargets(targets);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded shadow-xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Kirim WhatsApp ({selectedIds.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSending}
+                      onClick={handleSendBatchInApp}
+                      className="px-3 py-1.5 bg-[#2271b1] hover:bg-[#135e96] text-white text-xs font-bold rounded shadow-xs flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Ke Akun Saja ({selectedIds.length})</span>
+                    </button>
+                  </>
                 )}
 
-                <div className="relative w-full sm:w-60">
+                <div className="relative w-full sm:w-56">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari nama / NIP..."
+                    placeholder="Cari nama / NIP / No. WA..."
                     className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-[#c3c4c7] rounded focus:bg-white focus:border-[#2271b1] focus:outline-hidden"
                   />
                   {searchQuery && (
@@ -612,15 +812,18 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                           )}
                         </th>
                         <th className="py-2.5 px-3">Nama &amp; Akun Pegawai</th>
-                        <th className="py-2.5 px-3">Jabatan &amp; Unit Kerja</th>
+                        <th className="py-2.5 px-3">No. WhatsApp Akun</th>
                         <th className="py-2.5 px-3">Status Jurnal</th>
                         <th className="py-2.5 px-3">Status Pengingat</th>
-                        <th className="py-2.5 px-3 text-right">Aksi</th>
+                        <th className="py-2.5 px-3 text-right">Aksi Kirim</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f0f0f1]">
                       {filteredAccounts.map(({ pegawai, hasCompleted, countKegiatan, latestReminder }) => {
                         const isChecked = selectedIds.includes(pegawai.id);
+                        const waFormatted = formatWaNumber(pegawai.noHp);
+                        const isEditingPhone = editingNoHpId === pegawai.id;
+
                         return (
                           <tr key={pegawai.id} className="hover:bg-[#f6f7f7]/70 transition">
                             <td className="py-2.5 px-3">
@@ -657,13 +860,66 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                                   <div className="text-[11px] text-slate-500 font-mono">
                                     NIP. {pegawai.nip} &bull; @{pegawai.username || 'user'}
                                   </div>
+                                  <div className="text-[10px] text-slate-400 truncate max-w-[230px]">
+                                    {pegawai.jabatan}
+                                  </div>
                                 </div>
                               </div>
                             </td>
 
                             <td className="py-2.5 px-3">
-                              <div className="font-semibold text-slate-800">{pegawai.jabatan}</div>
-                              <div className="text-[11px] text-slate-500">{pegawai.unitKerja}</div>
+                              {isEditingPhone ? (
+                                <div className="flex items-center space-x-1">
+                                  <input
+                                    type="tel"
+                                    value={editingNoHpVal}
+                                    onChange={(e) => setEditingNoHpVal(e.target.value)}
+                                    placeholder="081234567890"
+                                    autoFocus
+                                    className="w-32 px-2 py-1 text-[11px] font-mono bg-white border border-[#2271b1] rounded focus:outline-hidden"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveInlineNoHp(pegawai)}
+                                    className="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer"
+                                    title="Simpan Nomor WhatsApp"
+                                  >
+                                    <Save className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingNoHpId(null)}
+                                    className="p-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded cursor-pointer"
+                                    title="Batal"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : waFormatted ? (
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-[11px] font-semibold inline-flex items-center space-x-1">
+                                    <Phone className="w-3 h-3 text-emerald-600" />
+                                    <span>+{waFormatted}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditNoHp(pegawai)}
+                                    className="p-1 text-slate-400 hover:text-[#2271b1] cursor-pointer"
+                                    title="Ubah Nomor WhatsApp"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditNoHp(pegawai)}
+                                  className="px-2 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-semibold inline-flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <Phone className="w-3 h-3" />
+                                  <span>+ Isi No. WA</span>
+                                </button>
+                              )}
                             </td>
 
                             <td className="py-2.5 px-3 whitespace-nowrap">
@@ -682,24 +938,32 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
 
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               {latestReminder ? (
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold border inline-flex items-center space-x-1 ${
-                                    latestReminder.status === 'resolved' || hasCompleted
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : latestReminder.status === 'read'
-                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                        : 'bg-amber-50 text-amber-800 border-amber-200'
-                                  }`}
-                                >
-                                  <Bell className="w-3 h-3" />
-                                  <span>
-                                    {latestReminder.status === 'resolved' || hasCompleted
-                                      ? 'Sudah Dikerjakan'
-                                      : latestReminder.status === 'read'
-                                        ? 'Sudah Dibaca'
-                                        : 'Terkirim (Belum Dibaca)'}
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border inline-flex items-center space-x-1 ${
+                                      latestReminder.status === 'resolved' || hasCompleted
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : latestReminder.status === 'read'
+                                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                                    }`}
+                                  >
+                                    <Bell className="w-3 h-3" />
+                                    <span>
+                                      {latestReminder.status === 'resolved' || hasCompleted
+                                        ? 'Sudah Dikerjakan'
+                                        : latestReminder.status === 'read'
+                                          ? 'Sudah Dibaca'
+                                          : 'Terkirim ke Akun'}
+                                    </span>
                                   </span>
-                                </span>
+                                  {latestReminder.viaWhatsApp && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center space-x-1">
+                                      <MessageCircle className="w-2.5 h-2.5" />
+                                      <span>Terkirim via WA</span>
+                                    </span>
+                                  )}
+                                </div>
                               ) : (
                                 <span className="text-[11px] text-slate-400">Belum dikirim</span>
                               )}
@@ -707,15 +971,44 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
 
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
                               {!hasCompleted ? (
-                                <button
-                                  type="button"
-                                  disabled={isSending}
-                                  onClick={() => handleSendSingle(pegawai)}
-                                  className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[11px] font-bold transition inline-flex items-center space-x-1 shadow-2xs cursor-pointer disabled:opacity-50"
-                                >
-                                  <Send className="w-3 h-3" />
-                                  <span>{latestReminder ? 'Kirim Ulang' : 'Kirim Pengingat'}</span>
-                                </button>
+                                <div className="inline-flex items-center space-x-1.5">
+                                  <a
+                                    href={buildWhatsAppUrl(pegawai, effectiveMessage, selectedDate)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => {
+                                      onSendPengingat([pegawai], selectedDate, effectiveMessage, {
+                                        viaWhatsApp: true,
+                                      });
+                                      showNotice(
+                                        'success',
+                                        waFormatted
+                                          ? `Membuka WhatsApp ke +${waFormatted} (${pegawai.nama}) & mencatat pengingat.`
+                                          : `Membuka WhatsApp untuk ${pegawai.nama} (silakan pilih kontak tujuan) & mencatat pengingat.`
+                                      );
+                                    }}
+                                    title={
+                                      waFormatted
+                                        ? `Kirim pengingat langsung ke WhatsApp +${waFormatted}`
+                                        : 'Buka WhatsApp (No. WA belum diisi — pilih kontak langsung di WhatsApp atau isi No. WA)'
+                                    }
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold transition inline-flex items-center space-x-1 shadow-2xs cursor-pointer"
+                                  >
+                                    <MessageCircle className="w-3 h-3" />
+                                    <span>Kirim WhatsApp</span>
+                                  </a>
+
+                                  <button
+                                    type="button"
+                                    disabled={isSending}
+                                    onClick={() => handleSendSingleInApp(pegawai)}
+                                    title="Kirim pengingat ke notifikasi akun aplikasi saja"
+                                    className="px-2 py-1 bg-slate-100 hover:bg-[#2271b1] hover:text-white text-slate-700 border border-slate-300 rounded text-[11px] font-semibold transition inline-flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Send className="w-3 h-3" />
+                                    <span>Akun</span>
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="text-[11px] text-emerald-600 font-semibold">Aman</span>
                               )}
@@ -731,6 +1024,9 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                 <div className="md:hidden divide-y divide-[#f0f0f1]">
                   {filteredAccounts.map(({ pegawai, hasCompleted, countKegiatan, latestReminder }) => {
                     const isChecked = selectedIds.includes(pegawai.id);
+                    const waFormatted = formatWaNumber(pegawai.noHp);
+                    const isEditingPhone = editingNoHpId === pegawai.id;
+
                     return (
                       <div key={pegawai.id} className="p-3.5 space-y-2.5 text-xs">
                         <div className="flex items-start justify-between gap-2">
@@ -770,16 +1066,65 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
+                        {/* Inline Phone Row on Mobile */}
+                        <div className="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded border border-slate-200">
+                          <span className="text-[11px] text-slate-500 font-semibold">No. WhatsApp:</span>
+                          {isEditingPhone ? (
+                            <div className="flex items-center space-x-1">
+                              <input
+                                type="tel"
+                                value={editingNoHpVal}
+                                onChange={(e) => setEditingNoHpVal(e.target.value)}
+                                placeholder="081234567890"
+                                className="w-32 px-2 py-0.5 text-[11px] font-mono bg-white border border-[#2271b1] rounded"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveInlineNoHp(pegawai)}
+                                className="p-1 bg-emerald-600 text-white rounded cursor-pointer"
+                              >
+                                <Save className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingNoHpId(null)}
+                                className="p-1 bg-slate-200 text-slate-700 rounded cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : waFormatted ? (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditNoHp(pegawai)}
+                              className="text-[11px] font-mono font-bold text-emerald-700 inline-flex items-center space-x-1 cursor-pointer"
+                            >
+                              <span>+{waFormatted}</span>
+                              <Edit3 className="w-3 h-3 text-slate-400" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditNoHp(pegawai)}
+                              className="text-[11px] font-semibold text-amber-700 inline-flex items-center space-x-1 cursor-pointer"
+                            >
+                              <Phone className="w-3 h-3" />
+                              <span>+ Isi No. WA</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                           <div className="text-[10px]">
                             {latestReminder ? (
                               <span className="text-amber-700 font-semibold">
-                                Status:{' '}
-                                {latestReminder.status === 'resolved' || hasCompleted
-                                  ? 'Sudah Dikerjakan'
-                                  : latestReminder.status === 'read'
-                                    ? 'Sudah Dibaca'
-                                    : 'Terkirim (Menunggu)'}
+                                {latestReminder.viaWhatsApp
+                                  ? 'Terkirim via WA'
+                                  : latestReminder.status === 'resolved' || hasCompleted
+                                    ? 'Sudah Dikerjakan'
+                                    : latestReminder.status === 'read'
+                                      ? 'Sudah Dibaca'
+                                      : 'Terkirim ke Akun'}
                               </span>
                             ) : (
                               <span className="text-slate-400">Belum ada pengingat</span>
@@ -787,15 +1132,31 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                           </div>
 
                           {!hasCompleted && (
-                            <button
-                              type="button"
-                              disabled={isSending}
-                              onClick={() => handleSendSingle(pegawai)}
-                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[11px] font-bold flex items-center space-x-1 cursor-pointer"
-                            >
-                              <Send className="w-3 h-3" />
-                              <span>{latestReminder ? 'Kirim Ulang' : 'Kirim Pengingat'}</span>
-                            </button>
+                            <div className="flex items-center space-x-1.5">
+                              <a
+                                href={buildWhatsAppUrl(pegawai, effectiveMessage, selectedDate)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => {
+                                  onSendPengingat([pegawai], selectedDate, effectiveMessage, {
+                                    viaWhatsApp: true,
+                                  });
+                                }}
+                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold flex items-center space-x-1 cursor-pointer"
+                              >
+                                <MessageCircle className="w-3 h-3" />
+                                <span>Kirim WhatsApp</span>
+                              </a>
+                              <button
+                                type="button"
+                                disabled={isSending}
+                                onClick={() => handleSendSingleInApp(pegawai)}
+                                className="px-2.5 py-1.5 bg-slate-100 text-slate-700 border border-slate-300 rounded text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
+                              >
+                                <Send className="w-3 h-3" />
+                                <span>Akun</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -824,13 +1185,17 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
               <Bell className="w-8 h-8 text-slate-300 mx-auto mb-2" />
               <p className="font-semibold text-slate-700">Belum ada pengingat yang dikirim.</p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Gunakan tab &ldquo;Belum Mengisi &amp; Kirim&rdquo; untuk mengirim pengingat ke akun pegawai.
+                Gunakan tab &ldquo;Belum Mengisi &amp; Kirim&rdquo; untuk mengirim pengingat ke WhatsApp &amp; akun pegawai.
               </p>
             </div>
           ) : (
             <div className="divide-y divide-[#f0f0f1]">
               {pengingatList.map((pg) => {
                 const isDone = pg.status === 'resolved' || hasFilledForDate(pg.pegawaiId, pg.tanggalTarget);
+                const peg = allPegawai.find((p) => p.id === pg.pegawaiId);
+                const targetNoHp = peg?.noHp || pg.noHpTujuan;
+                const waNum = formatWaNumber(targetNoHp);
+
                 return (
                   <div
                     key={pg.id}
@@ -843,6 +1208,12 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                         <span className="px-2 py-0.2 rounded bg-blue-50 text-[#2271b1] border border-blue-200 text-[10px] font-bold">
                           Target: {formatTanggalIndonesia(pg.tanggalTarget)}
                         </span>
+                        {pg.viaWhatsApp && (
+                          <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold inline-flex items-center space-x-1">
+                            <MessageCircle className="w-2.5 h-2.5" />
+                            <span>Terkirim via WA {waNum ? `(+${waNum})` : ''}</span>
+                          </span>
+                        )}
                         {isDone ? (
                           <span className="px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
                             &check; Jurnal Sudah Diisi
@@ -866,15 +1237,33 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => onDeletePengingat(pg.id)}
-                      className="self-end sm:self-center px-2.5 py-1.5 bg-rose-50 hover:bg-[#d63638] hover:text-white text-rose-700 border border-rose-200 rounded text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer shrink-0"
-                      title="Hapus Riwayat Pengingat"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Hapus</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                      {!isDone && (
+                        <a
+                          href={buildWhatsAppUrl(
+                            { nama: pg.pegawaiNama, nip: pg.pegawaiNip, noHp: targetNoHp },
+                            pg.pesan,
+                            pg.tanggalTarget
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => onMarkPengingatWaSent(pg.id, targetNoHp || '')}
+                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          <span>{pg.viaWhatsApp ? 'Kirim Ulang WA' : 'Kirim WA'}</span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onDeletePengingat(pg.id)}
+                        className="px-2.5 py-1.5 bg-rose-50 hover:bg-[#d63638] hover:text-white text-rose-700 border border-rose-200 rounded text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer"
+                        title="Hapus Riwayat Pengingat"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -887,122 +1276,392 @@ export const PengingatJurnalView: React.FC<PengingatJurnalViewProps> = ({
           TAB 3: KOTAK MASUK PENGINGAT AKUN YANG BERSANGKUTAN (PENERIMA)
          ===================================================================== */}
       {(!isSenderRole || activeSubTab === 'masuk') && (
-        <div className="bg-white border border-[#c3c4c7] rounded-lg shadow-2xs overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#c3c4c7] bg-[#f6f7f7] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h2 className="text-xs sm:text-sm font-bold text-[#1d2327] flex items-center space-x-1.5">
-                <Inbox className="w-4 h-4 text-[#2271b1]" />
-                <span>Pengingat Jurnal untuk Akun Anda ({myInboxPengingat.length})</span>
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Setiap pengingat yang dikirim oleh Atasan atau Admin akan tampil langsung di sini.
-              </p>
-            </div>
+        <div className="space-y-4">
+          {/* WhatsApp Number Setup Card for Current Account */}
+          <div
+            className={`border rounded-lg p-4 shadow-2xs text-xs ${
+              formatWaNumber(currentPegawai.noHp)
+                ? 'bg-emerald-50/50 border-emerald-200'
+                : 'bg-amber-50 border-amber-300'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start space-x-2.5">
+                <div
+                  className={`p-2 rounded-lg shrink-0 ${
+                    formatWaNumber(currentPegawai.noHp)
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900">
+                    {formatWaNumber(currentPegawai.noHp)
+                      ? `WhatsApp Akun Terhubung (+${formatWaNumber(currentPegawai.noHp)})`
+                      : 'Daftarkan Nomor WhatsApp Akun Anda'}
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    {formatWaNumber(currentPegawai.noHp)
+                      ? 'Pengingat jurnal dari Atasan atau Admin akan diarahkan langsung ke nomor WhatsApp ini.'
+                      : 'Masukkan nomor WhatsApp aktif Anda agar pengingat pengisian jurnal dapat dikirim langsung ke WhatsApp Anda.'}
+                  </p>
+                </div>
+              </div>
 
-            {myUnreadCount > 0 && (
-              <button
-                type="button"
-                onClick={onMarkAllAsRead}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-[#c3c4c7] rounded text-xs font-semibold flex items-center space-x-1.5 cursor-pointer self-start sm:self-auto"
-              >
-                <MailOpen className="w-3.5 h-3.5 text-[#2271b1]" />
-                <span>Tandai Semua Dibaca ({myUnreadCount})</span>
-              </button>
-            )}
+              {!selfEditingWa && formatWaNumber(currentPegawai.noHp) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelfNoHpInput(currentPegawai.noHp || '');
+                    setSelfEditingWa(true);
+                  }}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded font-semibold flex items-center space-x-1 self-start sm:self-center cursor-pointer shrink-0"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Ubah No. WA</span>
+                </button>
+              ) : (
+                <form
+                  onSubmit={handleSaveSelfNoHp}
+                  className="flex flex-wrap items-center gap-2 shrink-0"
+                >
+                  <input
+                    type="tel"
+                    value={selfNoHpInput}
+                    onChange={(e) => setSelfNoHpInput(e.target.value)}
+                    placeholder="Contoh: 081234567890"
+                    className="w-44 px-3 py-1.5 bg-white border border-slate-300 rounded font-mono text-xs focus:border-[#2271b1] focus:outline-hidden"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow-xs flex items-center space-x-1 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Simpan No. WA</span>
+                  </button>
+                  {formatWaNumber(currentPegawai.noHp) && (
+                    <button
+                      type="button"
+                      onClick={() => setSelfEditingWa(false)}
+                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-semibold cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                  )}
+                </form>
+              )}
+            </div>
           </div>
 
-          {myInboxPengingat.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-500">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-              <p className="font-bold text-slate-800">Tidak ada pengingat jurnal saat ini.</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Tetap isi Jurnal Harian Anda tepat waktu setiap hari kerja.
-              </p>
+          <div className="bg-white border border-[#c3c4c7] rounded-lg shadow-2xs overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#c3c4c7] bg-[#f6f7f7] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-xs sm:text-sm font-bold text-[#1d2327] flex items-center space-x-1.5">
+                  <Inbox className="w-4 h-4 text-[#2271b1]" />
+                  <span>Pengingat Jurnal untuk Akun Anda ({myInboxPengingat.length})</span>
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Setiap pengingat yang dikirim oleh Atasan atau Admin tampil langsung di sini dan dikirim ke WhatsApp Anda.
+                </p>
+              </div>
+
+              {myUnreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onMarkAllAsRead}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-[#c3c4c7] rounded text-xs font-semibold flex items-center space-x-1.5 cursor-pointer self-start sm:self-auto"
+                >
+                  <MailOpen className="w-3.5 h-3.5 text-[#2271b1]" />
+                  <span>Tandai Semua Dibaca ({myUnreadCount})</span>
+                </button>
+              )}
             </div>
-          ) : (
-            <div className="divide-y divide-[#f0f0f1]">
-              {myInboxPengingat.map((pg) => {
-                const isFilled =
-                  pg.status === 'resolved' || hasFilledForDate(currentPegawai.id, pg.tanggalTarget);
-                const isUnread = pg.status === 'unread' && !isFilled;
+
+            {myInboxPengingat.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">
+                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                <p className="font-bold text-slate-800">Tidak ada pengingat jurnal saat ini.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Tetap isi Jurnal Harian Anda tepat waktu setiap hari kerja.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#f0f0f1]">
+                {myInboxPengingat.map((pg) => {
+                  const isFilled =
+                    pg.status === 'resolved' || hasFilledForDate(currentPegawai.id, pg.tanggalTarget);
+                  const isUnread = pg.status === 'unread' && !isFilled;
+
+                  return (
+                    <div
+                      key={pg.id}
+                      className={`p-4 space-y-2.5 text-xs transition ${
+                        isUnread ? 'bg-amber-50/60 border-l-4 border-l-amber-500' : 'bg-white'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isFilled ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Jurnal Sudah Dikerjakan</span>
+                            </span>
+                          ) : isUnread ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#d63638] text-white animate-pulse">
+                              Pengingat Baru
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                              Sudah Dibaca
+                            </span>
+                          )}
+
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-[#2271b1] border border-blue-200 text-[10px] font-bold">
+                            Tanggal Target: {formatTanggalIndonesia(pg.tanggalTarget)}
+                          </span>
+
+                          {pg.viaWhatsApp && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold inline-flex items-center space-x-1">
+                              <MessageCircle className="w-3 h-3" />
+                              <span>Terkirim ke WhatsApp</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-[11px] text-slate-400 flex items-center space-x-1">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatWaktuKirim(pg.createdAt)}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-slate-800 font-medium leading-relaxed bg-white/80 p-3 rounded border border-slate-200">
+                        {pg.pesan}
+                      </p>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                        <div className="text-[11px] text-slate-500">
+                          Pengirim: <strong className="text-slate-700">{pg.pengirimNama}</strong>
+                          {pg.pengirimJabatan ? ` (${pg.pengirimJabatan})` : ''}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isUnread && (
+                            <button
+                              type="button"
+                              onClick={() => onMarkAsRead(pg.id)}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5 text-[#2271b1]" />
+                              <span>Tandai Dibaca</span>
+                            </button>
+                          )}
+
+                          {!isFilled && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isUnread) onMarkAsRead(pg.id);
+                                onOpenJurnalForDate(pg.tanggalTarget);
+                              }}
+                              className="px-3.5 py-1.5 bg-[#2271b1] hover:bg-[#135e96] text-white rounded text-[11px] font-bold shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                            >
+                              <PenLine className="w-3.5 h-3.5" />
+                              <span>Kerjakan Jurnal Sekarang</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL: ANTREAN KIRIM WHATSAPP PER AKUN (BATCH / MASSAL)
+         ===================================================================== */}
+      {waQueueModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-2xs flex items-center justify-center p-3">
+          <div className="bg-white border border-[#c3c4c7] rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-[90dvh]">
+            <div className="bg-emerald-700 text-white px-5 py-3.5 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2">
+                <MessageCircle className="w-5 h-5 text-emerald-100" />
+                <div>
+                  <h2 className="text-sm font-bold">
+                    Kirim Pengingat ke WhatsApp Masing-Masing Akun
+                  </h2>
+                  <p className="text-[11px] text-emerald-100">
+                    Tanggal Target: {formatTanggalIndonesia(selectedDate)} &bull; Terkirim: {waQueueDispatchedCount}/{waQueueItems.length} Akun
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWaQueueModalOpen(false)}
+                className="text-emerald-100 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="px-5 py-2.5 bg-emerald-50 border-b border-emerald-200 shrink-0">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-900 mb-1">
+                <span>Klik tombol &ldquo;Buka &amp; Kirim WA&rdquo; pada setiap akun di bawah untuk mengirim pesan ke WhatsApp masing-masing:</span>
+                <span>{waQueueDispatchedCount}/{waQueueItems.length}</span>
+              </div>
+              <div className="w-full h-2 bg-emerald-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-600 transition-all duration-300"
+                  style={{
+                    width: `${
+                      waQueueItems.length > 0
+                        ? Math.round((waQueueDispatchedCount / waQueueItems.length) * 100)
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Queue List */}
+            <div className="divide-y divide-slate-200 overflow-y-auto flex-1">
+              {waQueueItems.map((item) => {
+                const livePeg =
+                  allPegawai.find((p) => p.id === item.pegawaiId) || item.pegawaiSnapshot;
+                const waNum = formatWaNumber(livePeg.noHp);
+                const isEditingPhone = editingNoHpId === livePeg.id;
+                const formattedMsg = buildWhatsAppMessage(livePeg, item.pesan, item.tanggalTarget);
 
                 return (
                   <div
-                    key={pg.id}
-                    className={`p-4 space-y-2.5 text-xs transition ${
-                      isUnread ? 'bg-amber-50/60 border-l-4 border-l-amber-500' : 'bg-white'
+                    key={item.pengingatId}
+                    className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                      item.dispatched ? 'bg-emerald-50/40' : 'bg-white'
                     }`}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {isFilled ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Jurnal Sudah Dikerjakan</span>
-                          </span>
-                        ) : isUnread ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#d63638] text-white animate-pulse">
-                            Pengingat Baru
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                            Sudah Dibaca
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-bold text-slate-900">{livePeg.nama}</span>
+                        <span className="text-[11px] font-mono text-slate-500">
+                          (@{livePeg.username || 'user'})
+                        </span>
+                        {item.dispatched && (
+                          <span className="px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
+                            &check; Terkirim WA
                           </span>
                         )}
-
-                        <span className="px-2 py-0.5 rounded bg-blue-50 text-[#2271b1] border border-blue-200 text-[10px] font-bold">
-                          Tanggal Target: {formatTanggalIndonesia(pg.tanggalTarget)}
-                        </span>
                       </div>
 
-                      <div className="text-[11px] text-slate-400 flex items-center space-x-1">
-                        <Clock className="w-3 h-3" />
-                        <span>{formatWaktuKirim(pg.createdAt)}</span>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        {isEditingPhone ? (
+                          <div className="flex items-center space-x-1">
+                            <input
+                              type="tel"
+                              value={editingNoHpVal}
+                              onChange={(e) => setEditingNoHpVal(e.target.value)}
+                              placeholder="081234567890"
+                              autoFocus
+                              className="w-36 px-2 py-0.5 font-mono bg-white border border-[#2271b1] rounded"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveInlineNoHp(livePeg)}
+                              className="px-2 py-0.5 bg-emerald-600 text-white rounded font-semibold cursor-pointer"
+                            >
+                              Simpan
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingNoHpId(null)}
+                              className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        ) : waNum ? (
+                          <span className="text-emerald-700 font-mono font-semibold inline-flex items-center space-x-1">
+                            <Phone className="w-3 h-3" />
+                            <span>+{waNum}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditNoHp(livePeg)}
+                              className="text-slate-400 hover:text-[#2271b1] ml-1 cursor-pointer"
+                              title="Ubah No. WhatsApp"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditNoHp(livePeg)}
+                            className="text-amber-700 font-semibold hover:underline inline-flex items-center space-x-1 cursor-pointer"
+                          >
+                            <Phone className="w-3 h-3" />
+                            <span>+ Isi No. WhatsApp akun ini terlebih dahulu</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    <p className="text-slate-800 font-medium leading-relaxed bg-white/80 p-3 rounded border border-slate-200">
-                      {pg.pesan}
-                    </p>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(item.pengingatId, formattedMsg)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
+                        title="Salin teks pesan pengingat"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>{copiedId === item.pengingatId ? 'Disalin!' : 'Salin'}</span>
+                      </button>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-                      <div className="text-[11px] text-slate-500">
-                        Pengirim: <strong className="text-slate-700">{pg.pengirimNama}</strong>
-                        {pg.pengirimJabatan ? ` (${pg.pengirimJabatan})` : ''}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        {isUnread && (
-                          <button
-                            type="button"
-                            onClick={() => onMarkAsRead(pg.id)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
-                          >
-                            <Check className="w-3.5 h-3.5 text-[#2271b1]" />
-                            <span>Tandai Dibaca</span>
-                          </button>
-                        )}
-
-                        {!isFilled && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isUnread) onMarkAsRead(pg.id);
-                              onOpenJurnalForDate(pg.tanggalTarget);
-                            }}
-                            className="px-3.5 py-1.5 bg-[#2271b1] hover:bg-[#135e96] text-white rounded text-[11px] font-bold shadow-xs flex items-center space-x-1.5 cursor-pointer"
-                          >
-                            <PenLine className="w-3.5 h-3.5" />
-                            <span>Kerjakan Jurnal Sekarang</span>
-                          </button>
-                        )}
-                      </div>
+                      <a
+                        href={buildWhatsAppUrl(livePeg, item.pesan, item.tanggalTarget)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          setWaQueueItems((prev) =>
+                            prev.map((q) =>
+                              q.pengingatId === item.pengingatId ? { ...q, dispatched: true } : q
+                            )
+                          );
+                          onMarkPengingatWaSent(item.pengingatId, waNum ? `+${waNum}` : livePeg.noHp || '');
+                        }}
+                        className={`px-3 py-1.5 rounded text-[11px] font-bold flex items-center space-x-1 shadow-xs cursor-pointer transition ${
+                          item.dispatched
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }`}
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>{item.dispatched ? 'Kirim Ulang WA' : 'Buka & Kirim WA'}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
+
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Pengingat juga otomatis tampil di kotak masuk aplikasi akun masing-masing pegawai.
+              </span>
+              <button
+                type="button"
+                onClick={() => setWaQueueModalOpen(false)}
+                className="px-4 py-1.5 bg-[#2271b1] hover:bg-[#135e96] text-white font-bold rounded cursor-pointer"
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

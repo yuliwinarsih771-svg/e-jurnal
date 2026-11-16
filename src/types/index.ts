@@ -93,7 +93,11 @@ export interface PengingatJurnal {
   pengirimId: string;
   pengirimNama: string;
   pengirimJabatan?: string;
+  pengirimNoHp?: string;
   status: StatusPengingat;
+  viaWhatsApp?: boolean;
+  noHpTujuan?: string;
+  waSentAt?: string;
   createdAt: string; // ISO string
   readAt?: string;
 }

@@ -88,7 +88,7 @@
     },
     "PengingatJurnal": {
       "title": "PengingatJurnal",
-      "description": "Notifikasi pengingat pengisian jurnal harian yang dikirim ke akun pegawai yang belum mengerjakan jurnal",
+      "description": "Notifikasi pengingat pengisian jurnal harian yang dikirim ke akun pegawai dan WhatsApp masing-masing akun",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -100,7 +100,11 @@
         "pengirimId": { "type": "string" },
         "pengirimNama": { "type": "string" },
         "pengirimJabatan": { "type": "string" },
+        "pengirimNoHp": { "type": "string" },
         "status": { "type": "string", "enum": ["unread", "read", "resolved"] },
+        "viaWhatsApp": { "type": "boolean" },
+        "noHpTujuan": { "type": "string" },
+        "waSentAt": { "type": "string" },
         "createdAt": { "type": "string" },
         "readAt": { "type": "string" }
       },
