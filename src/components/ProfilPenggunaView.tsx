@@ -14,11 +14,7 @@ import {
   ShieldCheck,
   ClipboardCheck,
   Users,
-  CheckCheck,
-  Clock,
-  ArrowRight,
-  ExternalLink,
-  Building
+  ArrowRight
 } from 'lucide-react';
 import { Pegawai, PengaturanInstansi, KegiatanJurnal } from '../types';
 import confetti from 'canvas-confetti';
@@ -29,7 +25,6 @@ interface ProfilPenggunaViewProps {
   onUpdateProfile: (updatedData: Partial<Pegawai>) => void;
   allPegawai?: Pegawai[];
   kegiatanList?: KegiatanJurnal[];
-  onSwitchAccount?: (peg: Pegawai) => void;
   onNavigateToTab?: (tab: string) => void;
 }
 
@@ -39,7 +34,6 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
   onUpdateProfile,
   allPegawai = [],
   kegiatanList = [],
-  onSwitchAccount,
   onNavigateToTab,
 }) => {
   const isAtasan = currentPegawai.role === 'atasan';
@@ -64,27 +58,19 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
 
   // Notifications & active tab
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'biodata' | 'wewenang-atasan' | 'profil-atasan' | 'keamanan'>('biodata');
+  const [activeTab, setActiveTab] = useState<'biodata' | 'wewenang-atasan' | 'keamanan'>('biodata');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Subordinate staff under verification (for atasan role)
+  // Subordinate staff under verification (hanya untuk akun Atasan Verifikasi)
   const stafBinaan = useMemo(() => {
+    if (!isAtasan) return [];
     return allPegawai.filter((p) => p.role === 'pegawai' || p.atasanId === currentPegawai.id);
-  }, [allPegawai, currentPegawai.id]);
+  }, [allPegawai, currentPegawai.id, isAtasan]);
 
-  // Find verification supervisor object in allPegawai (for non-atasan viewing atasan profile)
-  const atasanVerifikator = useMemo(() => {
-    // Cari pegawai yang cocok dengan nipAtasan atau role atasan
-    const matchByNip = allPegawai.find((p) => p.nip && p.nip === pengaturan.nipAtasan);
-    if (matchByNip) return matchByNip;
-    const matchByAtasanId = allPegawai.find((p) => currentPegawai.atasanId && p.id === currentPegawai.atasanId);
-    if (matchByAtasanId) return matchByAtasanId;
-    return allPegawai.find((p) => p.role === 'atasan') || null;
-  }, [allPegawai, pengaturan.nipAtasan, currentPegawai.atasanId]);
-
-  // Verification statistics (for atasan)
+  // Verification statistics (hanya untuk akun Atasan Verifikasi)
   const verifikasiStats = useMemo(() => {
+    if (!isAtasan) return { total: 0, pending: 0, disetujui: 0, totalStaf: 0 };
     const stafIds = new Set(stafBinaan.map((p) => p.id));
     const relevantKegs = kegiatanList.filter((k) => stafIds.has(k.pegawaiId));
     const pending = relevantKegs.filter((k) => k.statusValidasi === 'Menunggu').length;
@@ -95,7 +81,7 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
       disetujui,
       totalStaf: stafBinaan.length,
     };
-  }, [stafBinaan, kegiatanList]);
+  }, [stafBinaan, kegiatanList, isAtasan]);
 
   // Photo upload handler
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -265,16 +251,16 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
 
           {/* Account Status Card */}
           <div className="w-full sm:w-auto text-left sm:text-right pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Status Peran</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Status Akun</span>
             {isAtasan ? (
               <span className="inline-flex items-center space-x-1 text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-300">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Verifikator Aktif</span>
               </span>
             ) : (
-              <span className="inline-flex items-center space-x-1 text-xs font-semibold text-blue-800 bg-blue-50 px-2.5 py-1 rounded border border-blue-200">
-                <User className="w-3.5 h-3.5 text-blue-600" />
-                <span>Pegawai ASN</span>
+              <span className="inline-flex items-center space-x-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Aktif Masuk</span>
               </span>
             )}
           </div>
@@ -296,7 +282,7 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
             <span>{isAtasan ? 'Data Diri Atasan Verifikasi' : 'Data Diri & Kepegawaian'}</span>
           </button>
 
-          {/* Tab 2: Kewenangan Verifikasi (Khusus Atasan) */}
+          {/* Tab 2: Kewenangan Verifikasi (HANYA MUNCUL DI AKUN ATASAN VERIFIKASI) */}
           {isAtasan && (
             <button
               type="button"
@@ -317,23 +303,7 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
             </button>
           )}
 
-          {/* Tab 3: Profil Atasan Verifikasi (Untuk Pegawai yang ingin melihat profil atasannya) */}
-          {!isAtasan && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('profil-atasan')}
-              className={`px-3 py-1.5 rounded font-semibold transition cursor-pointer flex items-center space-x-1.5 ${
-                activeTab === 'profil-atasan'
-                  ? 'bg-emerald-700 text-white shadow-2xs'
-                  : 'text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Profil Atasan Verifikasi</span>
-            </button>
-          )}
-
-          {/* Tab 4: Keamanan */}
+          {/* Tab Keamanan (Tersedia untuk semua akun) */}
           <button
             type="button"
             onClick={() => setActiveTab('keamanan')}
@@ -533,7 +503,7 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
         </form>
       )}
 
-      {/* Tab 2: Kewenangan & Staf Binaan Verifikasi (Khusus Atasan) */}
+      {/* Tab 2: Kewenangan & Staf Binaan Verifikasi (HANYA DITAMPILKAN DI AKUN ATASAN VERIFIKASI) */}
       {isAtasan && activeTab === 'wewenang-atasan' && (
         <div className="bg-white border border-[#c3c4c7] rounded-lg p-4 sm:p-6 shadow-2xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-[#f0f0f1] gap-2">
@@ -645,88 +615,7 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
         </div>
       )}
 
-      {/* Tab 3: Profil Atasan Verifikasi (Dilihat oleh Pegawai / ASN) */}
-      {!isAtasan && activeTab === 'profil-atasan' && (
-        <div className="bg-white border border-[#c3c4c7] rounded-lg p-4 sm:p-6 shadow-2xs space-y-4">
-          <div className="pb-3 border-b border-[#f0f0f1]">
-            <h2 className="text-sm font-bold text-[#1d2327] flex items-center space-x-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Profil Pejabat Penilai / Atasan Verifikasi Anda</span>
-            </h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Berikut adalah identitas resmi atasan yang berwenang memverifikasi, menilai, dan menandatangani lembar kerja harian Anda.
-            </p>
-          </div>
-
-          {/* Atasan Profile Card */}
-          <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-xl shadow-xs overflow-hidden shrink-0 border border-emerald-800">
-                {atasanVerifikator?.foto ? (
-                  <img src={atasanVerifikator.foto} alt={pengaturan.namaAtasan} className="w-full h-full object-cover" />
-                ) : (
-                  <span>{(pengaturan.namaAtasan || 'A').charAt(0)}</span>
-                )}
-              </div>
-              <div className="space-y-0.5 text-xs">
-                <div className="flex items-center space-x-1.5">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    Pejabat Penilai Resmi
-                  </span>
-                  <span className="text-[11px] text-emerald-700 font-semibold">&bull; Verifikator Aktif</span>
-                </div>
-                <div className="text-base font-bold text-slate-900 leading-tight">
-                  {pengaturan.namaAtasan || atasanVerifikator?.nama || 'Belum Ditetapkan'}
-                </div>
-                <div className="text-slate-600 font-mono text-[11px]">
-                  NIP. {pengaturan.nipAtasan || atasanVerifikator?.nip || '-'}
-                </div>
-                <div className="text-slate-700 font-medium">
-                  {pengaturan.jabatanAtasan || atasanVerifikator?.jabatan || 'Kepala Bidang / Atasan Langsung'}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Pangkat/Golongan: <strong>{pengaturan.pangkatAtasan || atasanVerifikator?.pangkatGolongan || 'Penata Tingkat I (III/d)'}</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Switch to Atasan Account */}
-            {onSwitchAccount && atasanVerifikator && (
-              <div className="shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-emerald-200">
-                <button
-                  type="button"
-                  onClick={() => onSwitchAccount(atasanVerifikator)}
-                  className="w-full sm:w-auto px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
-                  title={`Masuk ke sistem sebagai akun ${atasanVerifikator.nama}`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Masuk Sebagai Atasan Verifikasi</span>
-                </button>
-                <span className="text-[10px] text-slate-400 block text-center sm:text-right mt-1">
-                  Uji coba alur verifikasi &amp; paraf
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Verification Scope Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-              <span className="text-[11px] text-slate-400 font-semibold uppercase block">Instansi &amp; Unit Kerja</span>
-              <span className="font-bold text-slate-800 block mt-0.5">{pengaturan.badanDinas || pengaturan.namaInstansi}</span>
-              <span className="text-[11px] text-slate-500 block mt-0.5">{pengaturan.bidangBagian || '-'}</span>
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-              <span className="text-[11px] text-slate-400 font-semibold uppercase block">Wewenang Pengesahan Dokumen</span>
-              <span className="font-bold text-slate-800 block mt-0.5">Paraf Cetak Resmi Bulanan</span>
-              <span className="text-[11px] text-slate-500 block mt-0.5">Memeriksa, menyetujui, dan memberikan catatan pembinaan pada lembar kegiatan harian.</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 4: Keamanan & Kata Sandi */}
+      {/* Tab Keamanan & Kata Sandi */}
       {activeTab === 'keamanan' && (
         <div className="bg-white border border-[#c3c4c7] rounded-lg p-4 sm:p-6 shadow-2xs space-y-4">
           <div className="pb-3 border-b border-[#f0f0f1]">
@@ -818,8 +707,8 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
         </div>
       )}
 
-      {/* Information Box at Footer */}
-      {isAtasan ? (
+      {/* Information Box at Footer: HANYA TAMPIL DI AKUN ATASAN VERIFIKASI */}
+      {isAtasan && (
         <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <div className="flex items-center space-x-1.5 font-medium">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -827,15 +716,6 @@ export const ProfilPenggunaView: React.FC<ProfilPenggunaViewProps> = ({
           </div>
           <div className="text-[11px] text-emerald-700">
             {pengaturan.namaInstansi}
-          </div>
-        </div>
-      ) : (
-        <div className="bg-[#f6f7f7] border border-[#dcdcde] rounded-lg p-3 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-          <div>
-            Atasan Penilai Langsung: <strong className="text-slate-800">{pengaturan.namaAtasan || '-'}</strong>
-          </div>
-          <div className="text-[11px] text-slate-500 font-mono">
-            NIP. {pengaturan.nipAtasan || '-'}
           </div>
         </div>
       )}

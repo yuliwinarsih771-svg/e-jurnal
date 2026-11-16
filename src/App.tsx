@@ -886,12 +886,12 @@ export default function App() {
 
         {activeTab === 'profil' && (
           <ProfilPenggunaView
+            key={currentPegawai.id}
             currentPegawai={currentPegawai}
             pengaturan={currentPengaturan}
             onUpdateProfile={handleUpdateProfile}
             allPegawai={pegawaiList}
             kegiatanList={kegiatanList}
-            onSwitchAccount={handleSelectPegawai}
             onNavigateToTab={(tab) => setActiveTab(tab as NavTab)}
           />
         )}
