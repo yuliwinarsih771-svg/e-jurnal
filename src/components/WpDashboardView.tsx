@@ -5,12 +5,10 @@ import {
   Minimize2,
   ArrowRight,
   Trash2,
-  CheckCircle2,
-  Clock,
+  BarChart3,
   FileText,
   Printer,
   BellRing,
-  Send,
   ChevronRight,
 } from 'lucide-react';
 import {
@@ -20,7 +18,6 @@ import {
   PresensiRecord,
   PengingatJurnal,
 } from '../types';
-import { formatTanggalIndonesia } from '../utils/exportUtils';
 
 interface WpDashboardViewProps {
   currentPegawai: Pegawai;
@@ -50,6 +47,67 @@ const calcDurationHours = (mulai?: string, selesai?: string): number => {
   if (Number.isNaN(mH) || Number.isNaN(mM) || Number.isNaN(sH) || Number.isNaN(sM)) return 0;
   const diff = sH * 60 + sM - (mH * 60 + mM);
   return diff > 0 ? diff / 60 : 0;
+};
+
+const MONTHS_SHORT_ID = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des',
+];
+
+const parseIsoDateLocal = (iso?: string): Date | null => {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
+const toIsoDateLocal = (dt: Date): string => {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getWeekMonday = (dt: Date): Date => {
+  const copy = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const day = copy.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+  const diffToMon = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diffToMon);
+  return copy;
+};
+
+const formatWeekShortRange = (monday: Date): string => {
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  const d1 = String(monday.getDate()).padStart(2, '0');
+  const d2 = String(sunday.getDate()).padStart(2, '0');
+  const m1 = MONTHS_SHORT_ID[monday.getMonth()];
+  const m2 = MONTHS_SHORT_ID[sunday.getMonth()];
+  if (monday.getMonth() === sunday.getMonth()) {
+    return `${d1}–${d2} ${m1}`;
+  }
+  return `${d1} ${m1}–${d2} ${m2}`;
+};
+
+const formatWeekFullRange = (monday: Date): string => {
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  const d1 = String(monday.getDate()).padStart(2, '0');
+  const d2 = String(sunday.getDate()).padStart(2, '0');
+  const m1 = MONTHS_SHORT_ID[monday.getMonth()];
+  const m2 = MONTHS_SHORT_ID[sunday.getMonth()];
+  if (monday.getFullYear() === sunday.getFullYear()) {
+    return `${d1} ${m1} – ${d2} ${m2} ${sunday.getFullYear()}`;
+  }
+  return `${d1} ${m1} ${monday.getFullYear()} – ${d2} ${m2} ${sunday.getFullYear()}`;
 };
 
 interface MetricTripleItem {
@@ -243,17 +301,15 @@ export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
   pengingatList = [],
   pengaturan,
   onNavigateToTab,
-  onAddQuickDraft,
   onDeleteKegiatan,
   onOpenJurnalModal,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Quick Draft Form States (preserved 100%)
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
-  const [isSubmittingDraft, setIsSubmittingDraft] = useState(false);
-  const [draftSuccessMsg, setDraftSuccessMsg] = useState<string | null>(null);
+  // Weekly Achievement Diagram states
+  const [chartMetric, setChartMetric] = useState<'kegiatan' | 'jam'>('kegiatan');
+  const [chartScope, setChartScope] = useState<'saya' | 'unit'>('saya');
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
 
   const todayIso = useMemo(getTodayIso, []);
   const isSupervisorView =
@@ -707,29 +763,160 @@ export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
     },
   ];
 
-  // Recent 5 activities for logged-in user
-  const recentKegiatan = useMemo(() => [...userKegiatan].slice(0, 5), [userKegiatan]);
+  // Recent 5 activities for logged-in user (sorted newest-first)
+  const recentKegiatan = useMemo(() => {
+    const extractOrderNum = (id: string): number => {
+      const match = id.match(/(\d+)(?!.*\d)/);
+      return match ? Number(match[1]) : 0;
+    };
 
-  const handleSaveDraft = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!draftTitle.trim()) return;
+    return [...userKegiatan]
+      .sort((a, b) => {
+        const dateDiff = (b.tanggal || '').localeCompare(a.tanggal || '');
+        if (dateDiff !== 0) return dateDiff;
 
-    try {
-      setIsSubmittingDraft(true);
-      await onAddQuickDraft(
-        draftTitle.trim(),
-        draftContent.trim() || 'Draf pekerjaan harian tercatat.'
+        const startDiff = (b.waktuMulai || '').localeCompare(a.waktuMulai || '');
+        if (startDiff !== 0) return startDiff;
+
+        const endDiff = (b.waktuSelesai || '').localeCompare(a.waktuSelesai || '');
+        if (endDiff !== 0) return endDiff;
+
+        const idNumDiff = extractOrderNum(b.id) - extractOrderNum(a.id);
+        if (idNumDiff !== 0) return idNumDiff;
+
+        return (b.id || '').localeCompare(a.id || '');
+      })
+      .slice(0, 5);
+  }, [userKegiatan]);
+
+  // Weekly achievement buckets (6 consecutive weeks ending on latest active week)
+  const weeklyStats = useMemo(() => {
+    const sourceList =
+      isSupervisorView && chartScope === 'unit' ? kegiatanList : userKegiatan;
+
+    const validDates = sourceList
+      .map((k) => parseIsoDateLocal(k.tanggal))
+      .filter((d): d is Date => d !== null);
+
+    const todayDate = parseIsoDateLocal(todayIso) ?? new Date();
+    const anchorDate =
+      validDates.length > 0
+        ? new Date(Math.max(...validDates.map((d) => d.getTime())))
+        : todayDate;
+
+    const latestMonday = getWeekMonday(anchorDate);
+    const weekCount = 6;
+
+    const nonSuperAdminTotal = Math.max(
+      1,
+      allPegawai.filter((p) => p.role !== 'superadmin').length
+    );
+    const targetPerWeekTasks =
+      isSupervisorView && chartScope === 'unit' ? nonSuperAdminTotal * 5 : 10;
+    const targetPerWeekHours =
+      isSupervisorView && chartScope === 'unit' ? nonSuperAdminTotal * 37.5 : 37.5;
+
+    const buckets = Array.from({ length: weekCount }, (_, idx) => {
+      const offsetWeeks = weekCount - 1 - idx;
+      const monday = new Date(
+        latestMonday.getFullYear(),
+        latestMonday.getMonth(),
+        latestMonday.getDate() - offsetWeeks * 7
       );
-      setDraftTitle('');
-      setDraftContent('');
-      setDraftSuccessMsg('Draf kegiatan berhasil disimpan ke Jurnal Harian!');
-      setTimeout(() => setDraftSuccessMsg(null), 3500);
-    } catch {
-      // ignore
-    } finally {
-      setIsSubmittingDraft(false);
+      const weekKey = toIsoDateLocal(monday);
+
+      return {
+        index: idx,
+        weekLabel: `M${idx + 1}`,
+        weekKey,
+        shortRange: formatWeekShortRange(monday),
+        fullRange: formatWeekFullRange(monday),
+        total: 0,
+        disetujui: 0,
+        menunggu: 0,
+        ditolak: 0,
+        jamEfektif: 0,
+      };
+    });
+
+    const bucketMap = new Map(buckets.map((b) => [b.weekKey, b]));
+
+    for (const item of sourceList) {
+      const dt = parseIsoDateLocal(item.tanggal);
+      if (!dt) continue;
+      const monKey = toIsoDateLocal(getWeekMonday(dt));
+      const targetBucket = bucketMap.get(monKey);
+      if (!targetBucket) continue;
+
+      targetBucket.total += 1;
+      if (item.statusValidasi === 'Disetujui') targetBucket.disetujui += 1;
+      else if (item.statusValidasi === 'Ditolak') targetBucket.ditolak += 1;
+      else targetBucket.menunggu += 1;
+      targetBucket.jamEfektif += calcDurationHours(item.waktuMulai, item.waktuSelesai);
     }
-  };
+
+    const enriched = buckets.map((b) => {
+      const capaianTasksPct = Math.min(
+        100,
+        Math.round((b.total / Math.max(1, targetPerWeekTasks)) * 100)
+      );
+      const capaianHoursPct = Math.min(
+        100,
+        Math.round((b.jamEfektif / Math.max(1, targetPerWeekHours)) * 100)
+      );
+      return {
+        ...b,
+        jamRounded: Number(b.jamEfektif.toFixed(1)),
+        capaianTasksPct,
+        capaianHoursPct,
+      };
+    });
+
+    const totalTasks6W = enriched.reduce((acc, b) => acc + b.total, 0);
+    const totalApproved6W = enriched.reduce((acc, b) => acc + b.disetujui, 0);
+    const totalHours6W = enriched.reduce((acc, b) => acc + b.jamEfektif, 0);
+    const activeWeeksCount = Math.max(
+      1,
+      enriched.filter((b) => b.total > 0).length
+    );
+    const avgTasksPerWeek = totalTasks6W / activeWeeksCount;
+    const avgHoursPerWeek = totalHours6W / activeWeeksCount;
+
+    const rawMaxTasks = Math.max(
+      targetPerWeekTasks,
+      ...enriched.map((b) => b.total),
+      5
+    );
+    const rawMaxHours = Math.max(
+      targetPerWeekHours,
+      ...enriched.map((b) => b.jamEfektif),
+      10
+    );
+
+    return {
+      sourceCount: sourceList.length,
+      buckets: enriched,
+      targetPerWeekTasks,
+      targetPerWeekHours,
+      maxTasksScale: Math.ceil(rawMaxTasks / 5) * 5,
+      maxHoursScale: Math.ceil(rawMaxHours / 10) * 10,
+      totalTasks6W,
+      totalApproved6W,
+      totalHours6W: Number(totalHours6W.toFixed(1)),
+      avgTasksPerWeek: Number(avgTasksPerWeek.toFixed(1)),
+      avgHoursPerWeek: Number(avgHoursPerWeek.toFixed(1)),
+    };
+  }, [isSupervisorView, chartScope, kegiatanList, userKegiatan, todayIso, allPegawai]);
+
+  const activeWeekDetail = useMemo(() => {
+    const idx =
+      selectedWeekIndex !== null &&
+      selectedWeekIndex >= 0 &&
+      selectedWeekIndex < weeklyStats.buckets.length
+        ? selectedWeekIndex
+        : weeklyStats.buckets.length - 1;
+    return weeklyStats.buckets[idx];
+  }, [selectedWeekIndex, weeklyStats.buckets]);
 
   return (
     <div
@@ -815,6 +1002,487 @@ export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
               <Plus className="w-3.5 h-3.5" />
               <span>Tambah Kegiatan</span>
             </button>
+          </div>
+        </div>
+
+        {/* ====================================================================
+            TOP INTERACTIVE WORKSPACE: AKTIVITAS TERBARU & DRAF CEPAT
+           ==================================================================== */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+          {/* Left: Recent Activities (Terbaru di urutan atas) */}
+          <div className="bg-[#051226]/90 border border-sky-500/30 flex flex-col justify-between">
+            <div>
+              <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#071c3d] to-[#0a2754] border-b border-sky-500/25 flex items-center justify-between">
+                <h3 className="text-xs sm:text-sm font-semibold text-sky-100">
+                  Aktivitas &amp; Riwayat Tugas Terbaru Anda
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('jurnal-harian')}
+                  className="text-[11px] text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                >
+                  <span>Semua Jurnal</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="p-3.5">
+                {recentKegiatan.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400 space-y-2">
+                    <p>Belum ada catatan aktivitas jurnal untuk akun Anda saat ini.</p>
+                    <button
+                      type="button"
+                      onClick={onOpenJurnalModal}
+                      className="px-3.5 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Catat Kegiatan Pertama</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-sky-500/15">
+                    {recentKegiatan.map((keg) => (
+                      <div
+                        key={keg.id}
+                        className="py-2.5 first:pt-0 last:pb-0 flex items-start justify-between gap-3 text-xs"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-cyan-300/90 font-mono tabular-nums">
+                            <span>
+                              {keg.hari}, {keg.tanggal}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>
+                              {keg.waktuMulai} - {keg.waktuSelesai}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span
+                              className={
+                                keg.statusValidasi === 'Disetujui'
+                                  ? 'text-emerald-400 font-semibold'
+                                  : keg.statusValidasi === 'Ditolak'
+                                    ? 'text-rose-400 font-semibold'
+                                    : 'text-amber-300 font-semibold'
+                              }
+                            >
+                              {keg.statusValidasi}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-white truncate mt-0.5">
+                            {keg.kegiatan}
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                            Output: {keg.outputHasil}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onDeleteKegiatan(keg.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 transition cursor-pointer shrink-0"
+                          title="Hapus kegiatan ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Identity Footer inside card */}
+            <div className="px-3.5 py-2.5 bg-[#040d1d] border-t border-sky-500/20 text-[11px] text-slate-300 flex flex-wrap items-center justify-between gap-2">
+              <div className="truncate">
+                <strong className="text-white">{currentPegawai.nama}</strong>{' '}
+                <span className="font-mono text-cyan-300">({currentPegawai.nip})</span>
+              </div>
+              <div className="text-slate-400 truncate">
+                Atasan Penilai: <span className="text-slate-200">{pengaturan.namaAtasan || '-'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Diagram Pencapaian Perminggu */}
+          <div className="bg-[#051226]/90 border border-sky-500/30 flex flex-col justify-between">
+            <div>
+              <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#071c3d] to-[#0a2754] border-b border-sky-500/25 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <BarChart3 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <h3 className="text-xs sm:text-sm font-semibold text-sky-100 truncate">
+                    Diagram Pencapaian Perminggu
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+                  {isSupervisorView && (
+                    <div className="flex items-center bg-[#030b1a] border border-sky-500/30 p-0.5 rounded">
+                      <button
+                        type="button"
+                        onClick={() => setChartScope('saya')}
+                        className={`px-2 py-0.5 rounded-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          chartScope === 'saya'
+                            ? 'bg-sky-500 text-slate-950 font-semibold'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        Saya
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChartScope('unit')}
+                        className={`px-2 py-0.5 rounded-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                          chartScope === 'unit'
+                            ? 'bg-sky-500 text-slate-950 font-semibold'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        Unit
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center bg-[#030b1a] border border-sky-500/30 p-0.5 rounded">
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric('kegiatan')}
+                      className={`px-2 py-0.5 rounded-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                        chartMetric === 'kegiatan'
+                          ? 'bg-cyan-400 text-slate-950 font-semibold'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Tugas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartMetric('jam')}
+                      className={`px-2 py-0.5 rounded-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                        chartMetric === 'jam'
+                          ? 'bg-cyan-400 text-slate-950 font-semibold'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Jam Kerja
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToTab('cetak')}
+                    className="ml-1 text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                  >
+                    <Printer className="w-3 h-3" />
+                    <span>Cetak</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3.5 space-y-3 text-xs">
+                {/* Summary Strip (tabular-nums, hairline dividers) */}
+                <div className="grid grid-cols-3 divide-x divide-sky-500/20 pb-2.5 border-b border-sky-500/20">
+                  <div className="pr-2">
+                    <div className="text-[10px] text-slate-400">Total 6 Minggu</div>
+                    <div className="text-sm font-bold font-mono tabular-nums text-white mt-0.5">
+                      {chartMetric === 'kegiatan'
+                        ? `${weeklyStats.totalTasks6W} Tugas`
+                        : `${weeklyStats.totalHours6W} Jam`}
+                    </div>
+                  </div>
+                  <div className="px-2.5">
+                    <div className="text-[10px] text-slate-400">Rata-rata / Minggu</div>
+                    <div className="text-sm font-bold font-mono tabular-nums text-cyan-300 mt-0.5">
+                      {chartMetric === 'kegiatan'
+                        ? `${weeklyStats.avgTasksPerWeek} Tugas`
+                        : `${weeklyStats.avgHoursPerWeek} Jam`}
+                    </div>
+                  </div>
+                  <div className="pl-2.5">
+                    <div className="text-[10px] text-slate-400">
+                      {chartMetric === 'kegiatan' ? 'Disetujui (6 Mg)' : 'Target Mingguan'}
+                    </div>
+                    <div className="text-sm font-bold font-mono tabular-nums text-emerald-400 mt-0.5">
+                      {chartMetric === 'kegiatan'
+                        ? `${weeklyStats.totalApproved6W} Tugas`
+                        : `${weeklyStats.targetPerWeekHours} Jam`}
+                    </div>
+                  </div>
+                </div>
+
+                {weeklyStats.sourceCount === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400 space-y-2">
+                    <p>Belum ada data kegiatan mingguan untuk ditampilkan pada diagram.</p>
+                    <button
+                      type="button"
+                      onClick={onOpenJurnalModal}
+                      className="px-3.5 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Kegiatan</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Weekly Bar + Trend Line Chart */}
+                    {(() => {
+                      const maxVal =
+                        chartMetric === 'kegiatan'
+                          ? weeklyStats.maxTasksScale
+                          : weeklyStats.maxHoursScale;
+                      const targetVal =
+                        chartMetric === 'kegiatan'
+                          ? weeklyStats.targetPerWeekTasks
+                          : weeklyStats.targetPerWeekHours;
+                      const targetPct = Math.min(100, Math.round((targetVal / maxVal) * 100));
+
+                      const trendPoints = weeklyStats.buckets
+                        .map((b, idx) => {
+                          const val = chartMetric === 'kegiatan' ? b.total : b.jamEfektif;
+                          const x = ((idx + 0.5) / weeklyStats.buckets.length) * 100;
+                          const y = 100 - Math.min(100, (val / maxVal) * 100);
+                          return `${x.toFixed(2)},${y.toFixed(2)}`;
+                        })
+                        .join(' ');
+
+                      return (
+                        <div className="space-y-2">
+                          {/* Legend */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-300">
+                            <div className="flex items-center gap-3">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 bg-sky-500/80 border border-cyan-300 inline-block rounded-xs" />
+                                <span>
+                                  {chartMetric === 'kegiatan' ? 'Total Kegiatan' : 'Jam Efektif'}
+                                </span>
+                              </span>
+                              {chartMetric === 'kegiatan' && (
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 bg-emerald-400 inline-block rounded-xs" />
+                                  <span>Disetujui</span>
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="w-3 border-t border-dashed border-amber-400 inline-block" />
+                                <span>
+                                  Target ({targetVal} {chartMetric === 'kegiatan' ? 'tugas' : 'jam'})
+                                </span>
+                              </span>
+                            </div>
+                            <span className="text-slate-400 font-mono tabular-nums">
+                              Klik batang untuk detail
+                            </span>
+                          </div>
+
+                          {/* Plot Area */}
+                          <div className="relative flex gap-2 pt-2">
+                            {/* Y-axis ticks */}
+                            <div className="w-7 h-36 flex flex-col justify-between text-[10px] font-mono tabular-nums text-slate-400 text-right pr-1 select-none shrink-0">
+                              <span>{maxVal}</span>
+                              <span>{Math.round(maxVal * 0.5)}</span>
+                              <span>0</span>
+                            </div>
+
+                            {/* Chart canvas */}
+                            <div className="relative flex-1 h-36 border-l border-b border-sky-500/35">
+                              {/* Horizontal Gridlines */}
+                              <div className="absolute inset-x-0 top-0 border-t border-sky-500/15 pointer-events-none" />
+                              <div className="absolute inset-x-0 top-1/2 border-t border-sky-500/15 pointer-events-none" />
+                              <div className="absolute inset-x-0 top-1/4 border-t border-sky-500/10 pointer-events-none" />
+                              <div className="absolute inset-x-0 top-3/4 border-t border-sky-500/10 pointer-events-none" />
+
+                              {/* Target dashed line */}
+                              <div
+                                className="absolute inset-x-0 border-t border-dashed border-amber-400/75 pointer-events-none z-10"
+                                style={{ bottom: `${targetPct}%` }}
+                              />
+
+                              {/* SVG Trend Polyline Overlay */}
+                              <svg
+                                viewBox="0 0 100 100"
+                                preserveAspectRatio="none"
+                                className="absolute inset-0 w-full h-full pointer-events-none z-20 overflow-visible"
+                              >
+                                <polyline
+                                  points={trendPoints}
+                                  fill="none"
+                                  stroke="#7dd3fc"
+                                  strokeWidth="1.5"
+                                  vectorEffect="non-scaling-stroke"
+                                  strokeOpacity="0.85"
+                                />
+                              </svg>
+
+                              {/* 6 Weekly Interactive Columns */}
+                              <div className="relative z-20 grid grid-cols-6 gap-2 h-full px-2 items-end">
+                                {weeklyStats.buckets.map((bucket) => {
+                                  const primaryVal =
+                                    chartMetric === 'kegiatan'
+                                      ? bucket.total
+                                      : bucket.jamRounded;
+                                  const totalHeightPct = Math.min(
+                                    100,
+                                    Math.round((primaryVal / maxVal) * 100)
+                                  );
+                                  const approvedHeightPct =
+                                    bucket.total > 0
+                                      ? Math.min(
+                                          100,
+                                          Math.round((bucket.disetujui / bucket.total) * 100)
+                                        )
+                                      : 0;
+                                  const isSelected = activeWeekDetail.weekKey === bucket.weekKey;
+
+                                  return (
+                                    <button
+                                      key={bucket.weekKey}
+                                      type="button"
+                                      onClick={() => setSelectedWeekIndex(bucket.index)}
+                                      onMouseEnter={() => setSelectedWeekIndex(bucket.index)}
+                                      title={`${bucket.fullRange}: ${bucket.total} tugas (${bucket.disetujui} disetujui), ${bucket.jamRounded} jam`}
+                                      className={`group relative h-full flex flex-col justify-end items-center cursor-pointer focus-visible:outline-1 focus-visible:outline-cyan-400 transition-colors ${
+                                        isSelected ? 'bg-sky-500/10' : 'hover:bg-sky-500/5'
+                                      }`}
+                                    >
+                                      {/* Value label above bar */}
+                                      <span
+                                        className={`text-[10px] font-mono tabular-nums mb-1 leading-none transition-colors ${
+                                          isSelected
+                                            ? 'text-cyan-200 font-bold'
+                                            : 'text-slate-300'
+                                        }`}
+                                      >
+                                        {primaryVal}
+                                      </span>
+
+                                      {/* Vertical Bar */}
+                                      <div
+                                        className={`w-full max-w-[30px] relative rounded-t-xs transition-all duration-200 border ${
+                                          isSelected
+                                            ? 'border-cyan-300 bg-sky-500/45 shadow-[0_0_12px_rgba(34,211,238,0.35)]'
+                                            : 'border-sky-400/50 bg-sky-500/30 group-hover:bg-sky-500/40'
+                                        }`}
+                                        style={{
+                                          height: `${primaryVal > 0 ? Math.max(8, totalHeightPct) : 2}%`,
+                                        }}
+                                      >
+                                        {chartMetric === 'kegiatan' && bucket.disetujui > 0 && (
+                                          <div
+                                            className="absolute inset-x-0 bottom-0 bg-emerald-400/80 rounded-b-none"
+                                            style={{ height: `${approvedHeightPct}%` }}
+                                          />
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* X-Axis Week Range Labels */}
+                          <div className="flex gap-2">
+                            <div className="w-7 shrink-0" />
+                            <div className="flex-1 grid grid-cols-6 gap-2 px-2">
+                              {weeklyStats.buckets.map((bucket) => {
+                                const isSelected = activeWeekDetail.weekKey === bucket.weekKey;
+                                return (
+                                  <button
+                                    key={bucket.weekKey}
+                                    type="button"
+                                    onClick={() => setSelectedWeekIndex(bucket.index)}
+                                    className={`text-center cursor-pointer transition-colors ${
+                                      isSelected
+                                        ? 'text-cyan-300 font-semibold'
+                                        : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                  >
+                                    <div className="text-[10px] font-mono tabular-nums truncate">
+                                      {bucket.shortRange}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Selected Week Breakdown Readout */}
+                    <div className="pt-2 border-t border-sky-500/20 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
+                      <div className="truncate">
+                        <span className="text-slate-400">Periode: </span>
+                        <span className="font-semibold text-white font-mono tabular-nums">
+                          {activeWeekDetail.fullRange}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums">
+                        <span className="text-cyan-300">
+                          {activeWeekDetail.total} Tugas
+                        </span>
+                        <span aria-hidden="true" className="text-slate-600">·</span>
+                        <span className="text-emerald-400">
+                          {activeWeekDetail.disetujui} Disetujui
+                        </span>
+                        <span aria-hidden="true" className="text-slate-600">·</span>
+                        <span className="text-sky-200">
+                          {activeWeekDetail.jamRounded} Jam
+                        </span>
+                        <span aria-hidden="true" className="text-slate-600">·</span>
+                        <span className="text-amber-300 font-semibold">
+                          {chartMetric === 'kegiatan'
+                            ? `${activeWeekDetail.capaianTasksPct}%`
+                            : `${activeWeekDetail.capaianHoursPct}%`}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Command Controls (Expand + Quick Links) */}
+            <div className="px-3.5 py-2.5 bg-[#040d1d] border-t border-sky-500/20 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div className="flex flex-wrap items-center gap-2 text-slate-300">
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('rekapitulasi')}
+                  className="hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <FileText className="w-3 h-3" />
+                  <span>Rekapitulasi</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+                <span aria-hidden="true" className="text-slate-600">|</span>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTab('pengingat')}
+                  className="hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <BellRing className="w-3 h-3" />
+                  <span>Pengingat WhatsApp</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="px-2.5 py-1 bg-[#081c3a] hover:bg-[#0e2d5c] border border-sky-500/40 text-cyan-200 rounded flex items-center gap-1.5 cursor-pointer transition"
+              >
+                {isExpanded ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5" />
+                    <span>Kecilkan</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Perluas</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -956,232 +1624,6 @@ export const WpDashboardView: React.FC<WpDashboardViewProps> = ({
           ))}
         </div>
 
-        {/* ====================================================================
-            BOTTOM INTERACTIVE WORKSPACE: AKTIVITAS TERBARU & DRAF CEPAT
-           ==================================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pt-1">
-          {/* Left: Recent Activities */}
-          <div className="bg-[#051226]/90 border border-sky-500/30 flex flex-col justify-between">
-            <div>
-              <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#071c3d] to-[#0a2754] border-b border-sky-500/25 flex items-center justify-between">
-                <h3 className="text-xs sm:text-sm font-semibold text-sky-100">
-                  Aktivitas &amp; Riwayat Tugas Terbaru Anda
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => onNavigateToTab('jurnal-harian')}
-                  className="text-[11px] text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap"
-                >
-                  <span>Semua Jurnal</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-
-              <div className="p-3.5">
-                {recentKegiatan.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-400 space-y-2">
-                    <p>Belum ada catatan aktivitas jurnal untuk akun Anda saat ini.</p>
-                    <button
-                      type="button"
-                      onClick={onOpenJurnalModal}
-                      className="px-3.5 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded cursor-pointer inline-flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Catat Kegiatan Pertama</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-sky-500/15">
-                    {recentKegiatan.map((keg) => (
-                      <div
-                        key={keg.id}
-                        className="py-2.5 first:pt-0 last:pb-0 flex items-start justify-between gap-3 text-xs"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-cyan-300/90 font-mono tabular-nums">
-                            <span>
-                              {keg.hari}, {keg.tanggal}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span>
-                              {keg.waktuMulai} - {keg.waktuSelesai}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span
-                              className={
-                                keg.statusValidasi === 'Disetujui'
-                                  ? 'text-emerald-400 font-semibold'
-                                  : keg.statusValidasi === 'Ditolak'
-                                    ? 'text-rose-400 font-semibold'
-                                    : 'text-amber-300 font-semibold'
-                              }
-                            >
-                              {keg.statusValidasi}
-                            </span>
-                          </div>
-                          <div className="font-semibold text-white truncate mt-0.5">
-                            {keg.kegiatan}
-                          </div>
-                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                            Output: {keg.outputHasil}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => onDeleteKegiatan(keg.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 transition cursor-pointer shrink-0"
-                          title="Hapus kegiatan ini"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Identity Footer inside card */}
-            <div className="px-3.5 py-2.5 bg-[#040d1d] border-t border-sky-500/20 text-[11px] text-slate-300 flex flex-wrap items-center justify-between gap-2">
-              <div className="truncate">
-                <strong className="text-white">{currentPegawai.nama}</strong>{' '}
-                <span className="font-mono text-cyan-300">({currentPegawai.nip})</span>
-              </div>
-              <div className="text-slate-400 truncate">
-                Atasan Penilai: <span className="text-slate-200">{pengaturan.namaAtasan || '-'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Quick Draft Form */}
-          <div className="bg-[#051226]/90 border border-sky-500/30 flex flex-col justify-between">
-            <div>
-              <div className="px-3.5 py-2.5 bg-gradient-to-r from-[#071c3d] to-[#0a2754] border-b border-sky-500/25 flex items-center justify-between">
-                <h3 className="text-xs sm:text-sm font-semibold text-sky-100">
-                  Draf Cepat Kegiatan Harian
-                </h3>
-                <div className="flex items-center gap-2 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => onNavigateToTab('cetak')}
-                    className="text-cyan-300 hover:text-white flex items-center gap-1 cursor-pointer"
-                  >
-                    <Printer className="w-3 h-3" />
-                    <span>Cetak</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3.5 space-y-3 text-xs">
-                {draftSuccessMsg && (
-                  <div className="p-2.5 bg-emerald-950/70 border border-emerald-500/50 text-emerald-200 rounded text-[11px] font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{draftSuccessMsg}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handleSaveDraft} className="space-y-2.5">
-                  <div>
-                    <label
-                      htmlFor="cyber-draft-title"
-                      className="block text-[11px] font-semibold text-cyan-200 mb-1"
-                    >
-                      Judul / Uraian Tugas Hari Ini
-                    </label>
-                    <input
-                      id="cyber-draft-title"
-                      type="text"
-                      value={draftTitle}
-                      onChange={(e) => setDraftTitle(e.target.value)}
-                      placeholder="Contoh: Mengarsipkan surat masuk dan disposisi..."
-                      required
-                      className="w-full px-3 py-2 bg-[#030b1a] border border-sky-500/35 rounded text-xs text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="cyber-draft-content"
-                      className="block text-[11px] font-semibold text-cyan-200 mb-1"
-                    >
-                      Output / Hasil Pekerjaan
-                    </label>
-                    <textarea
-                      id="cyber-draft-content"
-                      rows={3}
-                      value={draftContent}
-                      onChange={(e) => setDraftContent(e.target.value)}
-                      placeholder="Rincian hasil / keluaran tugas yang telah diselesaikan..."
-                      className="w-full px-3 py-2 bg-[#030b1a] border border-sky-500/35 rounded text-xs text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-hidden"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <button
-                      type="submit"
-                      disabled={isSubmittingDraft || !draftTitle.trim()}
-                      className="px-4 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold rounded cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5 transition"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>{isSubmittingDraft ? 'Menyimpan...' : 'Simpan Draf'}</span>
-                    </button>
-
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                      <span className="font-mono tabular-nums">
-                        Total Anda: {userKegiatan.length} Kegiatan
-                      </span>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </div>
-
-            {/* Bottom Command Controls (Expand + Quick Links) */}
-            <div className="px-3.5 py-2.5 bg-[#040d1d] border-t border-sky-500/20 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-              <div className="flex flex-wrap items-center gap-2 text-slate-300">
-                <button
-                  type="button"
-                  onClick={() => onNavigateToTab('rekapitulasi')}
-                  className="hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
-                >
-                  <FileText className="w-3 h-3" />
-                  <span>Rekapitulasi</span>
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-                <span aria-hidden="true" className="text-slate-600">|</span>
-                <button
-                  type="button"
-                  onClick={() => onNavigateToTab('pengingat')}
-                  className="hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
-                >
-                  <BellRing className="w-3 h-3" />
-                  <span>Pengingat WhatsApp</span>
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="px-2.5 py-1 bg-[#081c3a] hover:bg-[#0e2d5c] border border-sky-500/40 text-cyan-200 rounded flex items-center gap-1.5 cursor-pointer transition"
-              >
-                {isExpanded ? (
-                  <>
-                    <Minimize2 className="w-3.5 h-3.5" />
-                    <span>Kecilkan</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 className="w-3.5 h-3.5" />
-                    <span>Perluas</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
