@@ -50,35 +50,99 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
 }) => {
   const [selectedSubordinateId, setSelectedSubordinateId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'Menunggu' | 'Disetujui' | 'Ditolak' | 'all'>('Menunggu');
+  const [periodMode, setPeriodMode] = useState<'all' | 'month'>('all');
+  const [filterBulan, setFilterBulan] = useState<number>(selectedBulan);
+  const [filterTahun, setFilterTahun] = useState<number>(selectedTahun);
   const [rejectModalItem, setRejectModalItem] = useState<KegiatanJurnal | null>(null);
   const [rejectReason, setRejectReason] = useState<string>('');
+  const [rejectError, setRejectError] = useState<string>('');
   const [quickApproveNote, setQuickApproveNote] = useState<string>('');
   const [approveModalItem, setApproveModalItem] = useState<KegiatanJurnal | null>(null);
+  const [isBatchConfirmOpen, setIsBatchConfirmOpen] = useState<boolean>(false);
 
-  // Subordinates list (pegawai who have role 'pegawai')
+  // Subordinates / staff list for dropdown (all non-superadmin excluding current user, plus any pegawaiId found in kegiatanList)
   const subordinates = useMemo(() => {
-    return allPegawai.filter(p => p.role === 'pegawai');
-  }, [allPegawai]);
+    const base = allPegawai.filter(
+      (p) => p.role !== 'superadmin' && p.id !== currentPegawai.id
+    );
+    const seen = new Set(base.map((p) => p.id));
+    for (const keg of kegiatanList) {
+      if (keg.pegawaiId && !seen.has(keg.pegawaiId)) {
+        const found = allPegawai.find((p) => p.id === keg.pegawaiId);
+        if (found) {
+          base.push(found);
+          seen.add(found.id);
+        }
+      }
+    }
+    return base;
+  }, [allPegawai, currentPegawai.id, kegiatanList]);
 
-  // Filtered items
-  const filteredList = useMemo(() => {
+  // Base list filtered by subordinate & period (before status tab)
+  const baseScopedList = useMemo(() => {
     return kegiatanList
       .filter((keg) => {
         if (selectedSubordinateId === 'all') return true;
         return keg.pegawaiId === selectedSubordinateId;
       })
       .filter((keg) => {
-        const [y, m] = keg.tanggal.split('-');
-        if (parseInt(y, 10) !== selectedTahun) return false;
-        if (parseInt(m, 10) !== selectedBulan) return false;
+        if (periodMode === 'all') return true;
+        const [y, m] = (keg.tanggal || '').split('-');
+        if (parseInt(y, 10) !== filterTahun) return false;
+        if (parseInt(m, 10) !== filterBulan) return false;
         return true;
-      })
+      });
+  }, [kegiatanList, selectedSubordinateId, periodMode, filterBulan, filterTahun]);
+
+  // Counts per status for current subordinate + period filter
+  const statusCounts = useMemo(() => {
+    let menunggu = 0;
+    let disetujui = 0;
+    let ditolak = 0;
+    for (const keg of baseScopedList) {
+      if (keg.statusValidasi === 'Menunggu') menunggu += 1;
+      else if (keg.statusValidasi === 'Disetujui') disetujui += 1;
+      else if (keg.statusValidasi === 'Ditolak') ditolak += 1;
+    }
+    return {
+      Menunggu: menunggu,
+      Disetujui: disetujui,
+      Ditolak: ditolak,
+      all: baseScopedList.length,
+    };
+  }, [baseScopedList]);
+
+  // Total pending across all periods (matches sidebar badge)
+  const totalPendingAllPeriods = useMemo(
+    () => kegiatanList.filter((k) => k.statusValidasi === 'Menunggu').length,
+    [kegiatanList]
+  );
+
+  // Available years in kegiatanList for year selector
+  const availableYears = useMemo(() => {
+    const years = new Set<number>([selectedTahun, new Date().getFullYear()]);
+    for (const keg of kegiatanList) {
+      const y = parseInt((keg.tanggal || '').split('-')[0], 10);
+      if (!Number.isNaN(y) && y > 2000) years.add(y);
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [kegiatanList, selectedTahun]);
+
+  // Filtered items sorted newest-first
+  const filteredList = useMemo(() => {
+    return baseScopedList
       .filter((keg) => {
         if (statusFilter === 'all') return true;
         return keg.statusValidasi === statusFilter;
       })
-      .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
-  }, [kegiatanList, selectedSubordinateId, selectedBulan, selectedTahun, statusFilter]);
+      .sort((a, b) => {
+        const dateDiff = (b.tanggal || '').localeCompare(a.tanggal || '');
+        if (dateDiff !== 0) return dateDiff;
+        const timeDiff = (b.waktuMulai || '').localeCompare(a.waktuMulai || '');
+        if (timeDiff !== 0) return timeDiff;
+        return (b.id || '').localeCompare(a.id || '');
+      });
+  }, [baseScopedList, statusFilter]);
 
   const pendingIds = useMemo(() => {
     return filteredList.filter(k => k.statusValidasi === 'Menunggu').map(k => k.id);
@@ -86,21 +150,26 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
 
   const handleBatchApproveAll = () => {
     if (pendingIds.length === 0) return;
-    if (confirm(`Setujui sekaligus ${pendingIds.length} laporan kegiatan bawahan dan bubuhkan paraf elektronik?`)) {
-      onBatchApprove(pendingIds);
-      confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
-    }
+    setIsBatchConfirmOpen(true);
+  };
+
+  const handleConfirmBatchApprove = () => {
+    if (pendingIds.length === 0) return;
+    onBatchApprove(pendingIds);
+    setIsBatchConfirmOpen(false);
+    confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
   };
 
   const handleConfirmReject = () => {
     if (!rejectModalItem) return;
     if (!rejectReason.trim()) {
-      alert('Mohon cantumkan catatan arahan / alasan revisi.');
+      setRejectError('Mohon cantumkan catatan arahan atau alasan revisi terlebih dahulu.');
       return;
     }
     onRejectKegiatan(rejectModalItem.id, rejectReason.trim());
     setRejectModalItem(null);
     setRejectReason('');
+    setRejectError('');
   };
 
   const handleConfirmApprove = () => {
@@ -261,22 +330,75 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
                 {(['Menunggu', 'Disetujui', 'Ditolak', 'all'] as const).map((st) => (
                   <button
                     key={st}
+                    type="button"
                     onClick={() => setStatusFilter(st)}
-                    className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-md sm:rounded-lg transition ${
+                    className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold rounded-md sm:rounded-lg transition cursor-pointer whitespace-nowrap ${
                       statusFilter === st
                         ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {st === 'all' ? 'Semua' : st}
+                    {st === 'all' ? 'Semua' : st}{' '}
+                    <span className="font-mono tabular-nums opacity-75">
+                      ({statusCounts[st]})
+                    </span>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Period Filter Selector */}
+            <div>
+              <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase mb-0.5 sm:mb-1">
+                Periode Tanggal
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <select
+                  value={periodMode}
+                  onChange={(e) => setPeriodMode(e.target.value as 'all' | 'month')}
+                  className="text-[11px] sm:text-xs font-semibold px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                >
+                  <option value="all">Semua Periode</option>
+                  <option value="month">Pilih Bulan Tertentu</option>
+                </select>
+
+                {periodMode === 'month' && (
+                  <>
+                    <select
+                      value={filterBulan}
+                      onChange={(e) => setFilterBulan(Number(e.target.value))}
+                      className="text-[11px] sm:text-xs font-semibold px-2 py-1.5 sm:py-2 bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    >
+                      {BULAN_INDONESIA.map((bulan, idx) => (
+                        <option key={bulan} value={idx + 1}>
+                          {bulan}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={filterTahun}
+                      onChange={(e) => setFilterTahun(Number(e.target.value))}
+                      className="text-[11px] sm:text-xs font-semibold px-2 py-1.5 sm:py-2 bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden font-mono tabular-nums"
+                    >
+                      {availableYears.map((yr) => (
+                        <option key={yr} value={yr}>
+                          {yr}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           <div className="text-[10px] sm:text-xs text-slate-500 font-medium">
-            Periode: <strong className="text-slate-800">{BULAN_INDONESIA[selectedBulan - 1]} {selectedTahun}</strong>
+            Menampilkan:{' '}
+            <strong className="text-slate-800">
+              {periodMode === 'all'
+                ? 'Semua Periode'
+                : `${BULAN_INDONESIA[filterBulan - 1]} ${filterTahun}`}
+            </strong>
           </div>
 
         </div>
@@ -291,8 +413,23 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
               Tidak Ada Laporan yang Perlu Ditinjau
             </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Semua laporan tugas bawahan untuk filter ini telah diproses atau belum ada aktivitas yang diajukan.
+              {periodMode === 'month' && totalPendingAllPeriods > 0
+                ? `Tidak ada laporan berstatus "${statusFilter === 'all' ? 'Semua' : statusFilter}" pada ${BULAN_INDONESIA[filterBulan - 1]} ${filterTahun}, namun terdapat ${totalPendingAllPeriods} laporan menunggu verifikasi di periode lain.`
+                : 'Semua laporan tugas bawahan untuk filter ini telah diproses atau belum ada aktivitas yang diajukan.'}
             </p>
+            {periodMode === 'month' && totalPendingAllPeriods > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPeriodMode('all');
+                  setSelectedSubordinateId('all');
+                  setStatusFilter('Menunggu');
+                }}
+                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Tampilkan Semua Periode ({totalPendingAllPeriods} Menunggu)
+              </button>
+            )}
           </div>
         ) : (
           filteredList.map((keg) => {
@@ -390,8 +527,12 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
                       </button>
 
                       <button
-                        onClick={() => setRejectModalItem(keg)}
-                        className="flex-1 lg:flex-none px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold rounded-xl transition flex items-center justify-center space-x-1"
+                        type="button"
+                        onClick={() => {
+                          setRejectModalItem(keg);
+                          setRejectError('');
+                        }}
+                        className="flex-1 lg:flex-none px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold rounded-xl transition flex items-center justify-center space-x-1 cursor-pointer"
                       >
                         <XCircle className="w-4 h-4 text-red-600" />
                         <span>Tolak / Revisi</span>
@@ -406,6 +547,38 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
           })
         )}
       </div>
+
+      {/* Modal Batch Approve Confirmation */}
+      {isBatchConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 animate-in fade-in zoom-in-95">
+            <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+              <CheckCheck className="w-5 h-5 text-emerald-600" />
+              <span>Konfirmasi Paraf Kolektif</span>
+            </h3>
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              Setujui sekaligus <strong className="text-slate-900 font-mono tabular-nums">{pendingIds.length}</strong> laporan kegiatan bawahan dan bubuhkan paraf elektronik?
+            </p>
+            <div className="mt-5 flex items-center justify-end space-x-2.5">
+              <button
+                type="button"
+                onClick={() => setIsBatchConfirmOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBatchApprove}
+                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center space-x-1 cursor-pointer"
+              >
+                <CheckCheck className="w-4 h-4" />
+                <span>Ya, Beri Paraf Semua</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Approve with optional note */}
       {approveModalItem && (
@@ -434,14 +607,16 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
 
             <div className="mt-5 flex items-center justify-end space-x-2.5">
               <button
+                type="button"
                 onClick={() => setApproveModalItem(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleConfirmApprove}
-                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center space-x-1"
+                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl flex items-center space-x-1 cursor-pointer"
               >
                 <CheckCircle className="w-4 h-4" />
                 <span>Setujui & Paraf</span>
@@ -470,23 +645,34 @@ export const VerifikasiAtasanView: React.FC<VerifikasiAtasanViewProps> = ({
               <textarea
                 rows={3}
                 value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
+                onChange={(e) => {
+                  setRejectReason(e.target.value);
+                  if (rejectError) setRejectError('');
+                }}
                 placeholder="Contoh: Mohon lengkapi keluaran hasil dengan jumlah berkas yang selesai atau tautkan bukti fisik SK."
                 required
                 className="w-full text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden"
               />
+              {rejectError && (
+                <p className="mt-1.5 text-xs font-medium text-red-600">{rejectError}</p>
+              )}
             </div>
 
             <div className="mt-5 flex items-center justify-end space-x-2.5">
               <button
-                onClick={() => setRejectModalItem(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"
+                type="button"
+                onClick={() => {
+                  setRejectModalItem(null);
+                  setRejectError('');
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleConfirmReject}
-                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl"
+                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl cursor-pointer"
               >
                 Kirim Catatan Revisi
               </button>
